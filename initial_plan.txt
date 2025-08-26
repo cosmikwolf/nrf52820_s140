@@ -1,0 +1,118 @@
+# TASK
+Create a basic Rust firmware for an MDBT50-256R module with nRF52820 SoC that demonstrates SoftDevice integration and basic functionality.
+
+# HARDWARE SPECIFICATIONS
+- Target: MDBT50-256R module (nRF52820 SoC)
+- Flash: 256KB
+- RAM: 32KB
+- SoftDevice: S140 v7.3.0 (Bluetooth LE stack)
+
+# FIRMWARE FEATURES
+## Core Functionality
+- Initialize and configure system clocks (32MHz external crystal for HFCLK, internal RC for LFCLK)
+- Load and enable S140 SoftDevice v7.3.0
+- Basic BLE advertising and connection handling
+- Custom management GATT service (UUID: 0x0000, Base: 0x43,0x40,...)
+- Low-power mode support
+
+## Debug & Development
+- defmt-based debug logging with RTT transport
+- Panic handler with detailed error reporting
+- Boot sequence logging
+- SoftDevice event logging
+
+# PROJECT STRUCTURE
+```
+src/
+├── main.rs           # Main application entry point
+├── softdevice.rs     # SoftDevice initialization and event handling
+├── clocks.rs         # Clock configuration
+├── mgmt_service.rs   # Custom management GATT service
+└── ble/
+    ├── mod.rs        # BLE module
+    ├── advertising.rs # BLE advertising setup
+    └── connection.rs  # Connection handling
+```
+
+# EXTERNAL DEPENDENCIES
+## Core Crates
+- `nrf-softdevice` = "0.1" # SoftDevice bindings and async runtime
+- `embassy-nrf` = { version = "0.1", features = ["nrf52820", "gpiote", "time-driver-rtc1"] }
+- `embassy-executor` = { version = "0.5", features = ["arch-cortex-m", "executor-thread", "defmt", "integrated-timers"] }
+
+## Debug & Utilities
+- `defmt` = "0.3" # Structured logging
+- `defmt-rtt` = "0.4" # RTT transport for defmt
+- `panic-probe` = { version = "0.3", features = ["print-defmt"] }
+- `cortex-m` = { version = "0.7", features = ["critical-section-single-core"] }
+- `cortex-m-rt` = "0.7" # Runtime for Cortex-M
+
+## Build Dependencies
+- `probe-rs` = "0.21" # For flashing and debugging
+
+# CONFIGURATION FILES
+## Cargo.toml
+- Configure for no_std embedded environment
+- Set optimization levels for debug/release
+- Define memory layout and target specifics
+
+## .cargo/config.toml
+- Set target to `thumbv7em-none-eabihf`
+- Configure runner to use probe-rs
+- Set rustflags for panic handling
+
+## Embed.toml
+- Configure probe-rs for MDBT50-256R
+- Set chip to nRF52820
+- Configure RTT and defmt transport
+
+## memory.x
+- Define FLASH and RAM regions accounting for SoftDevice S140 v7.3.0
+- FLASH: ORIGIN = 0x00027000, LENGTH = 100K (S140 uses 156K)
+- RAM: ORIGIN = 0x20002AD8, LENGTH = 16K (S140 uses ~11K minimum)
+
+# DEVELOPMENT WORKFLOW
+## Setup Commands
+```bash
+# Install required tools
+cargo install probe-rs --features cli
+rustup target add thumbv7em-none-eabihf
+
+# Flash SoftDevice (one-time setup)
+probe-rs download s140_nrf52_7.3.0_softdevice.hex --chip nRF52820
+
+# Build and flash firmware
+cargo run --release
+```
+
+## Testing & Validation
+- Verify SoftDevice initialization via defmt logs
+- Test BLE advertising visibility with phone/scanner
+- Validate low-power consumption measurements
+- Test custom management service connectivity
+- Monitor RTT output for debug information
+
+# BLE FUNCTIONALITY DEMO
+## Basic Advertising
+- Device name: "MDBT50-Demo"
+- Advertise standard BLE services
+- Connectable and discoverable mode
+- No LED indication (no LEDs connected)
+
+## Connection Handling
+- Accept single connection
+- Handle connection/disconnection events
+- Implement custom management GATT service
+- Management service with request characteristic (UUID: 0x0001)
+
+# POWER MANAGEMENT
+- Use SoftDevice sleep modes
+- Configure low-frequency clock using internal RC oscillator
+- Implement wake-on-BLE events
+- Optimize for battery operation
+
+# ERROR HANDLING
+- Comprehensive SoftDevice error checking
+- Graceful degradation on initialization failures
+- Debug output for all error conditions
+- Recovery mechanisms where possible
