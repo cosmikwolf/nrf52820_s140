@@ -2,12 +2,11 @@
 MEMORY
 {
   /* NOTE 1 K = 1 KiBi = 1024 bytes */
-  /* nRF52820 memory map with S140 v7.3.0 */
-  /* S140 v7.3.0 uses approximately 152K flash and 5.5K+ RAM */
   /* nRF52820: 256K flash, 32K RAM total */
-  /* Conservative allocation leaving room for S140 stack growth */
-  FLASH : ORIGIN = 0x00000000 + 156K, LENGTH = 256K - 156K  /* 100K for application */
-  RAM : ORIGIN = 0x20000000 + 12K, LENGTH = 32K - 12K      /* 20K for application */ 
+  /* S140 v7.3.0 uses approximately 152K flash and requires specific RAM layout */
+  /* According to S140 spec for nRF52820 */
+  FLASH : ORIGIN = 0x00027000, LENGTH = 256K - 156K
+  RAM : ORIGIN = 0x20002800, LENGTH = 32K - 10K
 }
 
 /* This is where the call stack will be allocated. */
