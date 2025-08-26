@@ -75,20 +75,27 @@ async fn main(spawner: Spawner) {
 async fn ble_task(sd: &'static Softdevice, mgmt_server: ManagementServer) {
     info!("Starting BLE task...");
     
-    // Create advertising data
-    let adv_data = &[
-        0x02, 0x01, 0x06, // Flags: General discoverable, BR/EDR not supported
-        0x0C, 0x09, // Complete local name
-        b'M', b'D', b'B', b'T', b'5', b'0', b'-', b'D', b'e', b'm', b'o',
-    ];
-    
-    let scan_data = &[];
-    
     info!("Starting BLE advertising...");
     
     loop {
+        // Create advertising data with correct format
+        let mut adv_data = heapless::Vec::<u8, 31>::new();
+        unwrap!(adv_data.extend_from_slice(&[
+            0x02, 0x01, 0x06, // Flags: General discoverable, BR/EDR not supported
+        ]));
+        unwrap!(adv_data.extend_from_slice(&[
+            0x0C, 0x09, // Complete local name (12 bytes + type)
+        ]));
+        unwrap!(adv_data.extend_from_slice(b"MDBT50-Demo"));
+
+        let mut scan_data = heapless::Vec::<u8, 31>::new();
+        
         let config = nrf_softdevice::ble::peripheral::Config::default();
-        let advertisement = nrf_softdevice::ble::peripheral::ConnectableAdvertisement::ScannableUndirected { adv_data, scan_data };
+        let advertisement = nrf_softdevice::ble::peripheral::ConnectableAdvertisement::ScannableUndirected { 
+            adv_data: &adv_data, 
+            scan_data: &scan_data 
+        };
+        
         let adv = nrf_softdevice::ble::peripheral::advertise_connectable(
             sd, 
             advertisement,
