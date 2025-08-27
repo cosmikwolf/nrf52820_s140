@@ -56,7 +56,9 @@ async fn main(spawner: Spawner) {
     info!("SoftDevice enabled successfully!");
 
     // Initialize management service
-    let mgmt_server = unwrap!(ManagementServer::new(sd));
+    let mgmt_server = ManagementServer::new(sd).unwrap_or_else(|_| {
+        defmt::panic!("Failed to initialize management service");
+    });
     info!("Management service initialized");
 
     // Spawn SoftDevice task (CRITICAL!)
@@ -106,12 +108,12 @@ async fn ble_task(sd: &'static Softdevice, mgmt_server: ManagementServer) {
             Ok(conn) => {
                 info!("BLE connected!");
 
-                // Handle the connection with management service
-                let result = connection_task(&conn, &mgmt_server).await;
-                match result {
-                    Ok(_) => info!("Connection ended normally"),
-                    Err(_) => info!("Connection disconnected"),
-                }
+                // Use the same pattern as the working example
+                // gatt_server::run automatically returns when disconnected
+                use nrf_softdevice::ble::gatt_server;
+                let _ = gatt_server::run(&conn, &mgmt_server, |_| {}).await;
+
+                info!("Connection disconnected, restarting advertising...");
             }
             Err(_) => {
                 error!("BLE advertising error");
@@ -121,15 +123,7 @@ async fn ble_task(sd: &'static Softdevice, mgmt_server: ManagementServer) {
     }
 }
 
-async fn connection_task(
-    conn: &nrf_softdevice::ble::Connection,
-    mgmt_server: &ManagementServer,
-) -> Result<(), nrf_softdevice::ble::DisconnectedError> {
-    info!("Connection established, starting management service...");
-
-    // Run the management service for this connection
-    mgmt_server.run(conn).await
-}
+// connection_task removed - now using gatt_server::run directly
 
 #[embassy_executor::task]
 async fn softdevice_task(sd: &'static Softdevice) -> ! {
