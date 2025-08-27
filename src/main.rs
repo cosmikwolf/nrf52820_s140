@@ -6,9 +6,7 @@ use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_nrf::{config::Config, interrupt};
 use embassy_time::{Duration, Timer};
-use nrf_softdevice::ble::advertisement_builder::{
-    Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload,
-};
+use nrf_softdevice::ble::advertisement_builder::{Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload};
 use nrf_softdevice::{Config as SdConfig, Softdevice};
 use panic_probe as _;
 
@@ -49,9 +47,7 @@ async fn main(spawner: Spawner) {
             event_length: 24,
         }),
         conn_gatt: Some(nrf_softdevice::raw::ble_gatt_conn_cfg_t { att_mtu: 247 }),
-        gatts_attr_tab_size: Some(nrf_softdevice::raw::ble_gatts_cfg_attr_tab_size_t {
-            attr_tab_size: 1408,
-        }),
+        gatts_attr_tab_size: Some(nrf_softdevice::raw::ble_gatts_cfg_attr_tab_size_t { attr_tab_size: 1408 }),
         gap_role_count: Some(nrf_softdevice::raw::ble_gap_cfg_role_count_t {
             adv_set_count: 1,
             periph_role_count: 1,
@@ -66,16 +62,16 @@ async fn main(spawner: Spawner) {
     info!("SoftDevice enabled successfully!");
 
     // Initialize Bluetooth GATT server
-    let bt_server = Server::new(sd).unwrap_or_else(|_| {
-        defmt::panic!("Failed to initialize BT server");
+    let server = Server::new(sd).unwrap_or_else(|_| {
+        defmt::panic!("Failed to initialize Server");
     });
-    info!("BT server initialized");
+    info!("Server initialized");
 
     // Spawn SoftDevice task (CRITICAL!)
     unwrap!(spawner.spawn(softdevice_task(sd)));
 
     // Spawn BLE task
-    unwrap!(spawner.spawn(ble_task(sd, bt_server)));
+    unwrap!(spawner.spawn(ble_task(sd, server)));
 
     info!("System initialized, entering main loop");
 
@@ -110,15 +106,14 @@ async fn ble_task(sd: &'static Softdevice, bt_server: Server) {
             scan_data: &SCAN_DATA,
         };
 
-        let conn =
-            match nrf_softdevice::ble::peripheral::advertise_connectable(sd, adv, &config).await {
-                Ok(conn) => conn,
-                Err(e) => {
-                    error!("BLE advertising failed: {:?}", defmt::Debug2Format(&e));
-                    Timer::after(Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
+        let conn = match nrf_softdevice::ble::peripheral::advertise_connectable(sd, adv, &config).await {
+            Ok(conn) => conn,
+            Err(e) => {
+                error!("BLE advertising failed: {:?}", defmt::Debug2Format(&e));
+                Timer::after(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
 
         info!("advertising done!");
 
@@ -126,10 +121,7 @@ async fn ble_task(sd: &'static Softdevice, bt_server: Server) {
         use nrf_softdevice::ble::gatt_server;
         let e = gatt_server::run(&conn, &bt_server, |_| {}).await;
 
-        info!(
-            "gatt_server run exited with error: {:?}",
-            defmt::Debug2Format(&e)
-        );
+        info!("gatt_server run exited with error: {:?}", defmt::Debug2Format(&e));
     }
 }
 
