@@ -20,7 +20,7 @@ halt_afterwards = false
 restore_unwritten_bytes = false
 
 [default.reset]
-# whether to enable the chip after flashing  
+# whether to enable the chip after flashing
 halt_afterwards = false
 
 [default.general]
@@ -34,7 +34,7 @@ chip_descriptions = []
 log_level = "WARN"
 
 # Use this flag to assert the nreset & ntrst pins during attaching the probe to the chip
-connect_under_reset = false
+connect_under_reset = true
 
 [default.rtt]
 # Whether or not to enable RTT logging
@@ -42,8 +42,8 @@ enabled = true
 
 # A list of channel associations to be displayed.
 channels = [
-    # { up = 0, down = 0, name = "Terminal", up_mode = "NoBlockSkip", format = "Defmt" },
-    { up = 0, down = 0, name = "Terminal", up_mode = "NoBlockSkip", format = "Defmt" },
+  # { up = 0, down = 0, name = "Terminal", up_mode = "NoBlockSkip", format = "Defmt" },
+  { up = 0, down = 0, name = "Terminal", up_mode = "NoBlockSkip", format = "Defmt" },
 ]
 
 # The timeout in ms for which to wait for the host to connect to the probe before continuing flashing.
@@ -51,3 +51,4 @@ timeout = 3000
 
 # Whether or not to show the location of the log messages
 show_location = true
+

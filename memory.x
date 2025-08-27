@@ -6,6 +6,6 @@ MEMORY
   /* S140 v7.3.0 uses approximately 152K flash and requires specific RAM layout */
   /* According to S140 spec for nRF52820 */
   FLASH : ORIGIN = 0x00027000, LENGTH = 256K - 156K
-  RAM : ORIGIN = 0x20002800, LENGTH = 32K - 10K
+  RAM : ORIGIN = 0x20004000, LENGTH = 32K - 16K
 }
 

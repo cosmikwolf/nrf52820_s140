@@ -2,39 +2,42 @@
 name = "nrf52820-s140-firmware"
 version = "0.1.0"
 edition = "2021"
-authors = ["Red System Ventures"]
+authors = ["Tenkai Kariya"]
 
 [dependencies]
 # Core embassy framework
-embassy-executor = { version = "0.8.0", features = [
+embassy-executor = { version = "0.9.0", features = [
   "arch-cortex-m",
   "executor-thread",
   "defmt",
 ] }
-embassy-time = { version = "0.4.0", features = [
+embassy-time = { version = "0.5.0", features = [
   "defmt",
   "defmt-timestamp-uptime",
 ] }
-embassy-sync = { version = "0.6.0", features = ["defmt"] }
-embassy-nrf = { version = "0.6.0", features = [
+embassy-sync = { version = "0.7.2", features = ["defmt"] }
+
+embassy-nrf = { version = "0.7.0", features = [
   "nrf52820",
-  "gpiote", 
+  "gpiote",
   "time-driver-rtc1",
   "defmt",
-], default-features = false }
+] }
 
-# SoftDevice bindings
 nrf-softdevice = { version = "0.1", features = [
   "s140",
   "nrf52820",
+  "defmt",
   "ble-peripheral",
+  "ble-central",
   "ble-gatt-server",
   "critical-section-impl",
 ] }
+# SoftDevice bindings
 
 # Debug and utilities
-defmt = "1.0.1"
-defmt-rtt = "1.0.0"
+defmt = { version = "1" }
+defmt-rtt = "1"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 
 # Core ARM (without critical-section-single-core to avoid conflict)
@@ -50,14 +53,7 @@ atomic-pool = "1.0"
 postcard = "1.0"
 
 [build-dependencies]
-# For linking memory.x
 cc = "1.0"
-
-[[bin]]
-name = "main"
-path = "src/main.rs"
-test = false
-bench = false
 
 [profile.release]
 debug = 2
