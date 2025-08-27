@@ -13,6 +13,13 @@ use nrf_softdevice::{Config as SdConfig, Softdevice};
 use panic_probe as _;
 
 mod services;
+// Temporarily disable modules while fixing compilation
+// mod protocol;
+// mod buffer_pool;
+// mod spi_comm;
+// mod state;
+// mod commands;
+
 use services::Server;
 
 #[embassy_executor::main]

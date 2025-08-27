@@ -15,9 +15,10 @@ embassy-time = { version = "0.4.0", features = [
   "defmt",
   "defmt-timestamp-uptime",
 ] }
+embassy-sync = { version = "0.6.0", features = ["defmt"] }
 embassy-nrf = { version = "0.6.0", features = [
   "nrf52820",
-  "gpiote",
+  "gpiote", 
   "time-driver-rtc1",
   "defmt",
 ], default-features = false }
@@ -43,6 +44,10 @@ cortex-m-rt = "0.7"
 # Async utilities
 heapless = { version = "0.9.1", default-features = false }
 nb = "1.0"
+
+# BLE Modem specific dependencies
+atomic-pool = "1.0"
+postcard = "1.0"
 
 [build-dependencies]
 # For linking memory.x
