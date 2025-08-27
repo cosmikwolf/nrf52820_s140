@@ -3,7 +3,7 @@
 //! Handles GAP operations including advertising, connection management,
 //! device configuration, and power management.
 
-use defmt::{debug, info, warn};
+use defmt::debug;
 use nrf_softdevice::Softdevice;
 
 use crate::{

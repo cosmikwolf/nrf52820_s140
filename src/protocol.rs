@@ -7,9 +7,24 @@
 
 use defmt::Format;
 use heapless::Vec;
+use crc::{Crc, CRC_16_IBM_SDLC};
 
 /// Maximum payload size (BLE_EVT_LEN_MAX + 2 bytes)
 pub const MAX_PAYLOAD_SIZE: usize = 247 + 2;
+
+/// CRC16-CCITT calculator for message validation
+const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_SDLC);
+
+/// Calculate CRC16 for a message
+pub fn calculate_crc16(data: &[u8]) -> u16 {
+    CRC16.checksum(data)
+}
+
+/// Validate CRC16 for a received message
+pub fn validate_crc16(data: &[u8], expected_crc: u16) -> bool {
+    let calculated_crc = calculate_crc16(data);
+    calculated_crc == expected_crc
+}
 
 /// Request codes sent by host to device
 #[repr(u16)]
@@ -78,6 +93,8 @@ pub enum RequestCode {
 pub enum ResponseCode {
     /// Command acknowledgment with results
     Ack = 0xAC50,
+    /// Error response
+    Error = 0xAC51,
     /// BLE event notification
     BleEvent = 0x8001,
     /// System-on-Chip event notification
@@ -85,7 +102,7 @@ pub enum ResponseCode {
 }
 
 /// Protocol packet structure
-#[derive(Debug, Clone, Format)]
+#[derive(Debug, Clone)]
 pub struct Packet {
     pub code: u16,
     pub payload: Vec<u8, MAX_PAYLOAD_SIZE>,
@@ -98,6 +115,7 @@ pub enum ProtocolError {
     InvalidCode,
     SerializationError,
     BufferFull,
+    InvalidCrc,
 }
 
 impl RequestCode {
@@ -153,18 +171,36 @@ impl ResponseCode {
 }
 
 impl Packet {
-    /// Create a new request packet (payload comes first, then code)
-    pub fn new_request(payload: &[u8]) -> Result<Self, ProtocolError> {
-        if payload.len() < 2 {
+    /// Create a new request packet from received data
+    /// Format: [Length:2][Payload:N][RequestCode:2][CRC16:2]
+    pub fn new_request(data: &[u8]) -> Result<Self, ProtocolError> {
+        if data.len() < 6 {  // Minimum: length(2) + code(2) + crc(2)
             return Err(ProtocolError::InvalidLength);
         }
 
-        let len = payload.len();
-        let code_bytes = &payload[len-2..];
-        let code = u16::from_be_bytes([code_bytes[0], code_bytes[1]]);
+        // Parse length header
+        let length = u16::from_be_bytes([data[0], data[1]]) as usize;
+        if length != data.len() {
+            return Err(ProtocolError::InvalidLength);
+        }
+
+        // Extract CRC from last 2 bytes
+        let crc_offset = data.len() - 2;
+        let received_crc = u16::from_be_bytes([data[crc_offset], data[crc_offset + 1]]);
         
+        // Validate CRC over entire message except CRC field
+        let message_data = &data[..crc_offset];
+        if !validate_crc16(message_data, received_crc) {
+            return Err(ProtocolError::InvalidCrc);
+        }
+
+        // Extract request code (2 bytes before CRC)
+        let code_offset = crc_offset - 2;
+        let code = u16::from_be_bytes([data[code_offset], data[code_offset + 1]]);
+        
+        // Extract payload (everything between length and code)
         let mut packet_payload = Vec::new();
-        packet_payload.extend_from_slice(&payload[..len-2])
+        packet_payload.extend_from_slice(&data[2..code_offset])
             .map_err(|_| ProtocolError::BufferFull)?;
 
         Ok(Self {
@@ -184,19 +220,86 @@ impl Packet {
             payload: packet_payload,
         })
     }
+    
+    /// Create a new request packet for sending (used in tests)
+    /// This creates the packet structure, call serialize() to get bytes for transmission
+    pub fn new_request_for_sending(code: RequestCode, payload: &[u8]) -> Result<Self, ProtocolError> {
+        let mut packet_payload = Vec::new();
+        packet_payload.extend_from_slice(payload)
+            .map_err(|_| ProtocolError::BufferFull)?;
+
+        Ok(Self {
+            code: code as u16,
+            payload: packet_payload,
+        })
+    }
+    
+    /// Serialize request packet to bytes for transmission
+    /// Format: [Length:2][Payload:N][RequestCode:2][CRC16:2]
+    pub fn serialize_request(&self) -> Result<Vec<u8, MAX_PAYLOAD_SIZE>, ProtocolError> {
+        let mut message = Vec::new();
+        
+        // Calculate total length (length header + payload + code + crc)
+        let total_length = 2 + self.payload.len() + 2 + 2;
+        if total_length > MAX_PAYLOAD_SIZE {
+            return Err(ProtocolError::BufferFull);
+        }
+        
+        // Add length header
+        let length_bytes = (total_length as u16).to_be_bytes();
+        message.extend_from_slice(&length_bytes)
+            .map_err(|_| ProtocolError::BufferFull)?;
+            
+        // Add payload
+        message.extend_from_slice(&self.payload)
+            .map_err(|_| ProtocolError::BufferFull)?;
+        
+        // Add request code
+        let code_bytes = self.code.to_be_bytes();
+        message.extend_from_slice(&code_bytes)
+            .map_err(|_| ProtocolError::BufferFull)?;
+        
+        // Calculate and add CRC over everything except CRC itself
+        let crc = calculate_crc16(&message);
+        let crc_bytes = crc.to_be_bytes();
+        message.extend_from_slice(&crc_bytes)
+            .map_err(|_| ProtocolError::BufferFull)?;
+
+        Ok(message)
+    }
 
     /// Serialize packet to bytes for transmission
+    /// Format: [Length:2][ResponseCode:2][Payload:N][CRC16:2]
     pub fn serialize(&self) -> Result<Vec<u8, MAX_PAYLOAD_SIZE>, ProtocolError> {
-        let mut buffer = Vec::new();
+        let mut message = Vec::new();
         
-        // For response: code first, then payload
-        let code_bytes = self.code.to_be_bytes();
-        buffer.extend_from_slice(&code_bytes)
+        // Calculate total length (length header + code + payload + crc)
+        let total_length = 2 + 2 + self.payload.len() + 2;
+        if total_length > MAX_PAYLOAD_SIZE {
+            return Err(ProtocolError::BufferFull);
+        }
+        
+        // Add length header
+        let length_bytes = (total_length as u16).to_be_bytes();
+        message.extend_from_slice(&length_bytes)
             .map_err(|_| ProtocolError::BufferFull)?;
-        buffer.extend_from_slice(&self.payload)
+        
+        // Add response code
+        let code_bytes = self.code.to_be_bytes();
+        message.extend_from_slice(&code_bytes)
+            .map_err(|_| ProtocolError::BufferFull)?;
+            
+        // Add payload
+        message.extend_from_slice(&self.payload)
+            .map_err(|_| ProtocolError::BufferFull)?;
+        
+        // Calculate and add CRC over everything except CRC itself
+        let crc = calculate_crc16(&message);
+        let crc_bytes = crc.to_be_bytes();
+        message.extend_from_slice(&crc_bytes)
             .map_err(|_| ProtocolError::BufferFull)?;
 
-        Ok(buffer)
+        Ok(message)
     }
 
     /// Get the request code (if this is a request packet)

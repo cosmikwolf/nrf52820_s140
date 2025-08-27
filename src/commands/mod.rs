@@ -103,11 +103,25 @@ impl ResponseBuilder {
         Self::new().build(ResponseCode::Ack)
     }
 
-    /// Build an error response
-    pub fn build_error(error_code: u16) -> Result<TxPacket, CommandError> {
+    /// Build an error response with error code
+    pub fn build_error_code(error_code: u16) -> Result<TxPacket, CommandError> {
         let mut builder = Self::new();
         builder.add_u16(error_code)?;
-        builder.build(ResponseCode::Ack)
+        builder.build(ResponseCode::Error)
+    }
+    
+    /// Build an error response from CommandError
+    pub fn build_error(error: CommandError) -> Result<TxPacket, CommandError> {
+        let error_code = match error {
+            CommandError::UnknownCommand => 0x01,
+            CommandError::InvalidPayload => 0x02,
+            CommandError::BufferError(_) => 0x03,
+            CommandError::ProtocolError(_) => 0x04,
+            CommandError::StateError(_) => 0x05,
+            CommandError::SoftDeviceError => 0x06,
+            CommandError::NotImplemented => 0x07,
+        };
+        Self::build_error_code(error_code)
     }
 }
 
@@ -166,7 +180,7 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
         RequestCode::GattsHvx => gatts::handle_hvx(&packet.payload).await,
         RequestCode::GattsSysAttrGet => {
             error!("GattsSysAttrGet not implemented in original firmware");
-            ResponseBuilder::build_error(0x01) // Not implemented
+            ResponseBuilder::build_error(CommandError::NotImplemented)
         },
         RequestCode::GattsSysAttrSet => gatts::handle_sys_attr_set(&packet.payload).await,
 
@@ -182,7 +196,7 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
         RequestCode::GattcRead |
         RequestCode::GattcWrite => {
             debug!("Central mode command not supported: {:?}", request_code);
-            ResponseBuilder::build_error(0x02) // Not supported
+            ResponseBuilder::build_error(CommandError::NotImplemented)
         }
     };
 
@@ -195,7 +209,7 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
         Err(e) => {
             error!("Command processing failed: {:?}", e);
             // Try to send error response
-            if let Ok(error_packet) = ResponseBuilder::build_error(0xFF) {
+            if let Ok(error_packet) = ResponseBuilder::build_error(CommandError::UnknownCommand) {
                 let _ = spi_comm::send_response(error_packet).await;
             }
             return Err(e);
@@ -203,6 +217,88 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
     }
 
     Ok(())
+}
+
+/// Command processor state
+pub struct CommandProcessor {
+    // Future: Add command processing state/statistics here
+}
+
+impl CommandProcessor {
+    /// Create a new command processor
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    /// Process a single command
+    pub async fn process_command(&mut self, packet: Packet, sd: &Softdevice) -> Result<TxPacket, CommandError> {
+        let request_code = packet.request_code()
+            .ok_or(CommandError::UnknownCommand)?;
+
+        debug!("Processing command: {:?}", request_code);
+
+        match request_code {
+            // System Commands
+            RequestCode::GetInfo => system::handle_get_info(&packet.payload).await,
+            RequestCode::Shutdown => system::handle_shutdown(&packet.payload).await,
+            RequestCode::Reboot => system::handle_reboot(&packet.payload).await,
+
+            // UUID Management
+            RequestCode::RegisterUuidGroup => uuid::handle_register_uuid_group(&packet.payload).await,
+
+            // GAP Operations - Address Management
+            RequestCode::GapGetAddr => gap::handle_get_addr(&packet.payload).await,
+            RequestCode::GapSetAddr => gap::handle_set_addr(&packet.payload).await,
+
+            // GAP Operations - Advertising Control
+            RequestCode::GapAdvStart => gap::handle_adv_start(&packet.payload, sd).await,
+            RequestCode::GapAdvStop => gap::handle_adv_stop(&packet.payload, sd).await,
+            RequestCode::GapAdvSetConfigure => gap::handle_adv_configure(&packet.payload).await,
+
+            // GAP Operations - Device Configuration
+            RequestCode::GapGetName => gap::handle_get_name(&packet.payload).await,
+            RequestCode::GapSetName => gap::handle_set_name(&packet.payload).await,
+            RequestCode::GapConnParamsGet => gap::handle_conn_params_get(&packet.payload).await,
+            RequestCode::GapConnParamsSet => gap::handle_conn_params_set(&packet.payload).await,
+
+            // GAP Operations - Connection Management
+            RequestCode::GapConnParamUpdate => gap::handle_conn_param_update(&packet.payload).await,
+            RequestCode::GapDataLengthUpdate => gap::handle_data_length_update(&packet.payload).await,
+            RequestCode::GapPhyUpdate => gap::handle_phy_update(&packet.payload).await,
+            RequestCode::GapDisconnect => gap::handle_disconnect(&packet.payload).await,
+
+            // GAP Operations - Power & RSSI
+            RequestCode::GapSetTxPower => gap::handle_set_tx_power(&packet.payload).await,
+            RequestCode::GapStartRssiReporting => gap::handle_start_rssi_reporting(&packet.payload).await,
+            RequestCode::GapStopRssiReporting => gap::handle_stop_rssi_reporting(&packet.payload).await,
+
+            // GATT Server Operations
+            RequestCode::GattsServiceAdd => gatts::handle_service_add(&packet.payload, sd).await,
+            RequestCode::GattsCharacteristicAdd => gatts::handle_characteristic_add(&packet.payload, sd).await,
+            RequestCode::GattsMtuReply => gatts::handle_mtu_reply(&packet.payload).await,
+            RequestCode::GattsHvx => gatts::handle_hvx(&packet.payload).await,
+            RequestCode::GattsSysAttrGet => {
+                error!("GattsSysAttrGet not implemented in original firmware");
+                ResponseBuilder::build_error(CommandError::NotImplemented)
+            },
+            RequestCode::GattsSysAttrSet => gatts::handle_sys_attr_set(&packet.payload).await,
+
+            // Central mode commands (not implemented in peripheral-only configuration)
+            RequestCode::GapConnect |
+            RequestCode::GapConnectCancel |
+            RequestCode::GapScanStart |
+            RequestCode::GapScanStop |
+            RequestCode::GattcMtuRequest |
+            RequestCode::GattcServiceDiscover |
+            RequestCode::GattcCharacteristicsDiscover |
+            RequestCode::GattcDescriptorsDiscover |
+            RequestCode::GattcRead |
+            RequestCode::GattcWrite => {
+                debug!("Central mode command not supported: {:?}", request_code);
+                ResponseBuilder::build_error(CommandError::NotImplemented)
+            }
+        }
+    }
 }
 
 /// Main command processor task

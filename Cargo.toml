@@ -51,6 +51,10 @@ nb = "1.0"
 # BLE Modem specific dependencies
 atomic-pool = "1.0"
 postcard = "1.0"
+crc = "3.0"  # For CRC16-CCITT validation
+
+# Testing dependencies  
+defmt-test = "0.3"
 
 [build-dependencies]
 cc = "1.0"

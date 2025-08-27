@@ -95,33 +95,92 @@ async fn spi_tx_task(
 
 ## Testing Strategy
 
-### 1. Loopback Test Binary
-**File: `src/bin/test_spi_loopback.rs`**
+### 1. Hardware Tests with probe-rs
+**File: `tests/spi_loopback.rs`**
 ```rust
-// Connect TX MOSI to RX MOSI externally
-// Send test patterns and verify reception
-// Measure round-trip latency
-// Verify CRC validation
+#[defmt_test::tests]
+mod tests {
+    use defmt_test::*;
+    
+    #[test]
+    fn spi_loopback_basic() {
+        // Physical wire: TX MOSI (P0.04) → RX MOSI (P0.05)
+        // Send test patterns and verify reception
+    }
+    
+    #[test]
+    fn spi_crc_validation() {
+        // Test CRC validation (correct and corrupted)
+    }
+    
+    #[test] 
+    fn spi_latency_test() {
+        // Measure round-trip latency < 100μs
+    }
+}
+```
+**Run with:** `cargo test --test spi_loopback`
+
+### 2. Integration Tests
+**File: `tests/spi_commands.rs`**
+```rust
+#[defmt_test::tests]
+mod tests {
+    #[test]
+    fn command_echo_test() {
+        // Test full command/response flow
+    }
+    
+    #[test]
+    fn command_error_handling() {
+        // Test error responses and recovery
+    }
+}
 ```
 
-### 2. Protocol Validation
-- [ ] Test message framing with various sizes
-- [ ] Verify CRC catches corrupted messages
-- [ ] Test buffer pool exhaustion handling
-- [ ] Verify concurrent TX/RX operation
+### 3. Unit Tests
+**File: `tests/protocol_unit.rs`**
+```rust
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_crc16_calculation() {
+        // Pure logic test - no hardware needed
+    }
+    
+    #[test]
+    fn test_packet_serialization() {
+        // Test protocol parsing/serialization
+    }
+}
+```
 
-### 3. Performance Benchmarks
+### 4. Performance Benchmarks
 - Target: < 100μs command response latency
 - Throughput: > 1Mbps sustained
 - Buffer utilization: < 50% under normal load
 
 ## Dependencies
 ```toml
-# Cargo.toml additions - ALREADY PRESENT except CRC
+# Cargo.toml additions - UPDATED
 [dependencies]
 embassy-nrf = { features = ["nrf52820"] } # ✅ Present
 atomic-pool = "1.0"  # ✅ Present (used instead of heapless::pool)
-crc = "3.0"  # 🔴 TODO - Add for CRC16-CCITT
+crc = "3.0"  # ✅ ADDED - For CRC16-CCITT
+defmt-test = "0.3"  # ✅ ADDED - For hardware testing with probe-rs
+```
+
+### Test Configuration
+Tests run on hardware via probe-rs:
+```bash
+# Run hardware SPI tests
+cargo test --test spi_loopback
+
+# Run integration tests  
+cargo test --test spi_commands
+
+# Run unit tests
+cargo test --test protocol_unit
 ```
 
 ## Success Criteria

@@ -1,5 +1,5 @@
 //! BLE Modem State Management
-//! 
+//!
 //! This module manages the global state of the BLE modem including:
 //! - UUID base registrations
 //! - Connection state
@@ -7,13 +7,9 @@
 //! - Dynamic GATT services and characteristics
 
 use defmt::Format;
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
-use heapless::{IndexMap, Vec};
-use core::str::FromStr;
-use nrf_softdevice::{
-    ble::{Connection, Uuid},
-    Softdevice,
-};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
+use heapless::{index_map::FnvIndexMap, Vec};
+use nrf_softdevice::ble::Uuid;
 
 /// Maximum number of registered UUID bases (matches original C implementation)
 pub const MAX_UUID_BASES: usize = 4;
@@ -32,7 +28,7 @@ pub struct UuidBase {
 }
 
 /// Service information
-#[derive(Debug, Clone, Copy, Format)]
+#[derive(Clone, Copy)]
 pub struct ServiceInfo {
     pub handle: u16,
     pub uuid: Uuid,
@@ -40,7 +36,7 @@ pub struct ServiceInfo {
 }
 
 /// Characteristic information
-#[derive(Debug, Clone, Copy, Format)]
+#[derive(Clone, Copy)]
 pub struct CharacteristicInfo {
     pub service_handle: u16,
     pub value_handle: u16,
@@ -76,7 +72,7 @@ pub enum AdvertisingState {
 }
 
 /// Connection state
-#[derive(Debug, Clone, Copy, Format)]
+#[derive(Clone, Copy, Format)]
 pub struct ConnectionState {
     pub connected: bool,
     pub conn_handle: u16,
@@ -87,7 +83,7 @@ pub struct ConnectionState {
 }
 
 /// Device configuration
-#[derive(Debug, Clone, Format)]
+#[derive(Clone)]
 pub struct DeviceConfig {
     pub device_name: heapless::String<32>,
     pub device_addr: [u8; 6],
@@ -97,37 +93,36 @@ pub struct DeviceConfig {
 }
 
 /// Main modem state structure
-#[derive(Format)]
 pub struct ModemState {
     /// Registered UUID bases
     pub uuid_bases: Vec<UuidBase, MAX_UUID_BASES>,
-    
+
     /// Dynamic services
     pub services: Vec<ServiceInfo, MAX_SERVICES>,
-    
+
     /// Dynamic characteristics
     pub characteristics: Vec<CharacteristicInfo, MAX_CHARACTERISTICS>,
-    
+
     /// Current connection state
     pub connection: Option<ConnectionState>,
-    
+
     /// Current advertising state
     pub advertising_state: AdvertisingState,
-    
+
     /// Device configuration
     pub device_config: DeviceConfig,
-    
+
     /// Characteristic handle to service handle mapping
-    pub char_to_service_map: IndexMap<u16, u16, MAX_CHARACTERISTICS>,
+    pub char_to_service_map: FnvIndexMap<u16, u16, MAX_CHARACTERISTICS>,
 }
 
 impl Default for ConnectionParams {
     fn default() -> Self {
         Self {
-            min_conn_interval: 24,     // 30ms (24 * 1.25ms)
-            max_conn_interval: 40,     // 50ms (40 * 1.25ms)
+            min_conn_interval: 24, // 30ms (24 * 1.25ms)
+            max_conn_interval: 40, // 50ms (40 * 1.25ms)
             slave_latency: 0,
-            conn_sup_timeout: 400,     // 4s (400 * 10ms)
+            conn_sup_timeout: 400, // 4s (400 * 10ms)
         }
     }
 }
@@ -135,7 +130,7 @@ impl Default for ConnectionParams {
 impl Default for DeviceConfig {
     fn default() -> Self {
         Self {
-            device_name: heapless::String::try_from("BLE-Modem").unwrap(),
+            device_name: heapless::String::new(),
             device_addr: [0; 6],
             addr_type: 0,
             tx_power: 0,
@@ -154,7 +149,7 @@ impl ModemState {
             connection: None,
             advertising_state: AdvertisingState::Stopped,
             device_config: DeviceConfig::default(),
-            char_to_service_map: IndexMap::new(),
+            char_to_service_map: FnvIndexMap::new(),
         }
     }
 
@@ -166,8 +161,9 @@ impl ModemState {
 
         let handle = self.uuid_bases.len() as u8;
         let uuid_base = UuidBase { base, handle };
-        
-        self.uuid_bases.push(uuid_base)
+
+        self.uuid_bases
+            .push(uuid_base)
             .map_err(|_| StateError::UuidBasesExhausted)?;
 
         Ok(handle)
@@ -190,7 +186,8 @@ impl ModemState {
             service_type,
         };
 
-        self.services.push(service_info)
+        self.services
+            .push(service_info)
             .map_err(|_| StateError::ServicesExhausted)
     }
 
@@ -206,10 +203,12 @@ impl ModemState {
         }
 
         // Add to handle mapping
-        self.char_to_service_map.insert(char_info.value_handle, char_info.service_handle)
+        self.char_to_service_map
+            .insert(char_info.value_handle, char_info.service_handle)
             .map_err(|_| StateError::CharacteristicsExhausted)?;
 
-        self.characteristics.push(char_info)
+        self.characteristics
+            .push(char_info)
             .map_err(|_| StateError::CharacteristicsExhausted)
     }
 
@@ -245,8 +244,7 @@ impl ModemState {
 
     /// Update device name
     pub fn set_device_name(&mut self, name: &str) -> Result<(), StateError> {
-        self.device_config.device_name = heapless::String::try_from(name)
-            .map_err(|_| StateError::NameTooLong)?;
+        self.device_config.device_name = heapless::String::try_from(name).map_err(|_| StateError::NameTooLong)?;
         Ok(())
     }
 
@@ -310,15 +308,22 @@ pub enum StateError {
     InvalidHandle,
 }
 
+use embassy_sync::once_lock::OnceLock;
+
 /// Global modem state - protected by mutex for thread safety
-pub static MODEM_STATE: Mutex<NoopRawMutex, ModemState> = Mutex::new(ModemState::new());
+static MODEM_STATE_ONCE: OnceLock<Mutex<CriticalSectionRawMutex, ModemState>> = OnceLock::new();
+
+/// Get or initialize the global modem state
+pub fn get_modem_state() -> &'static Mutex<CriticalSectionRawMutex, ModemState> {
+    MODEM_STATE_ONCE.get_or_init(|| Mutex::new(ModemState::new()))
+}
 
 /// Helper functions for state access
 pub async fn with_state<F, R>(f: F) -> R
 where
     F: FnOnce(&mut ModemState) -> R,
 {
-    let mut state = MODEM_STATE.lock().await;
+    let mut state = get_modem_state().lock().await;
     f(&mut state)
 }
 
@@ -326,3 +331,4 @@ where
 pub fn init() {
     defmt::info!("Modem state initialized");
 }
+

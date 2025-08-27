@@ -6,40 +6,47 @@
 
 use defmt::{debug, error, info, warn, Format};
 use embassy_nrf::{
+    bind_interrupts,
     gpio::{Level, Output, OutputDrive},
-    peripherals::{P0_00, P0_01, P0_04, P0_05, P0_06, P0_07, TWISPI0, TWISPI1},
-    spim::{self, Spim},
+    peripherals::{TWISPI0, TWISPI1, P0_00, P0_01, P0_02, P0_03, P0_04, P0_05, P0_06, P0_07},
+    spim::{self, Spim, Frequency},
     spis::{self, Spis},
+    Peri,
 };
 use embassy_sync::{
-    blocking_mutex::raw::NoopRawMutex,
+    blocking_mutex::raw::CriticalSectionRawMutex,
     channel::Channel,
 };
 use embassy_time::{Duration, Timer};
 
 use crate::{
-    buffer_pool::{TxPacket, RxBuffer, BufferError},
+    buffer_pool::{TxPacket, BufferError},
     protocol::{Packet, ProtocolError},
 };
+
+bind_interrupts!(struct Irqs {
+    TWISPI0 => spim::InterruptHandler<TWISPI0>;
+    TWISPI1 => spis::InterruptHandler<TWISPI1>;
+});
 
 /// TX SPI Configuration (SPIM0 - Master)
 /// Pins: SS=P0.01, SCK=P0.00, MOSI=P0.04, MISO=P0.02 (dummy)
 /// Config: 8MHz, CPOL=High, CPHA=Leading, MSB First
 pub struct TxSpiConfig {
-    pub ss_pin: P0_01,
-    pub sck_pin: P0_00,
-    pub mosi_pin: P0_04,
-    pub miso_pin: embassy_nrf::peripherals::P0_02, // Dummy MISO for master mode
+    pub ss_pin: Peri<'static, P0_01>,
+    pub sck_pin: Peri<'static, P0_00>,
+    pub mosi_pin: Peri<'static, P0_04>,
+    pub miso_pin: Peri<'static, P0_02>, // Dummy MISO for master mode
 }
 
 /// RX SPI Configuration (SPIS1 - Slave)  
 /// Pins: SS=P0.07, SCK=P0.06, MOSI=P0.05, MISO=P0.03 (dummy)
 /// Config: CPOL=High, CPHA=Leading, MSB First
 pub struct RxSpiConfig {
-    pub ss_pin: P0_07,
-    pub sck_pin: P0_06,
-    pub mosi_pin: P0_05,
-    pub miso_pin: embassy_nrf::peripherals::P0_03, // Dummy MISO for slave mode
+    pub ss_pin: Peri<'static, P0_07>,
+    pub sck_pin: Peri<'static, P0_06>,
+    pub mosi_pin: Peri<'static, P0_05>,
+    pub miso_pin: Peri<'static, P0_03>, // Dummy MISO for slave mode
 }
 
 /// SPI communication errors
@@ -72,136 +79,134 @@ impl From<ProtocolError> for SpiError {
 }
 
 /// Channel for TX packets (from command processor to TX SPI task)
-pub static TX_CHANNEL: Channel<NoopRawMutex, TxPacket, 8> = Channel::new();
+pub static TX_CHANNEL: Channel<CriticalSectionRawMutex, TxPacket, 8> = Channel::new();
 
 /// Channel for RX packets (from RX SPI task to command processor)
-pub static RX_CHANNEL: Channel<NoopRawMutex, Packet, 1> = Channel::new();
+pub static RX_CHANNEL: Channel<CriticalSectionRawMutex, Packet, 1> = Channel::new();
 
 /// TX SPI task - handles Device → Host communication
+/// Receives packets from TX_CHANNEL and transmits them via SPIM0
 #[embassy_executor::task]
 pub async fn tx_spi_task(
-    spim: TWISPI0,
-    config: TxSpiConfig,
+    ss_pin: Peri<'static, P0_01>,
+    sck_pin: Peri<'static, P0_00>,
+    mosi_pin: Peri<'static, P0_04>,
+    miso_pin: Peri<'static, P0_02>,
+    spim0: Peri<'static, TWISPI0>,
 ) {
-    info!("Starting TX SPI task");
-
+    info!("Starting TX SPI task (SPIM0 - Master)");
+    
     // Configure SPI pins
-    let mut spi_config = spim::Config::default();
-    spi_config.frequency = spim::Frequency::M8; // 8 MHz
-    spi_config.mode = spim::MODE_3; // CPOL=High, CPHA=Leading
-
-    // Create SPI master instance
-    let mut spi = Spim::new(
-        spim,
-        embassy_nrf::interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_TWISPI0),
-        config.sck_pin,
-        config.mosi_pin,
-        config.miso_pin.degrade(), // Dummy MISO
-        spi_config,
-    );
-
-    // Create SS (Chip Select) pin - active low
-    let mut ss = Output::new(config.ss_pin, Level::High, OutputDrive::Standard);
-
+    let mut ss = Output::new(ss_pin, Level::High, OutputDrive::Standard);
+    
+    let mut config = spim::Config::default();
+    config.frequency = Frequency::M8;
+    config.mode = spim::Mode {
+        polarity: spim::Polarity::IdleHigh,
+        phase: spim::Phase::CaptureOnSecondTransition,
+    };
+    
+    let mut spi = Spim::new(spim0, Irqs, sck_pin, mosi_pin, miso_pin, config);
+    
     info!("TX SPI configured: 8MHz, CPOL=High, CPHA=Leading");
-
+    
     loop {
         // Wait for packet to transmit
-        let packet = TX_CHANNEL.receive().await;
+        let tx_packet = TX_CHANNEL.receive().await;
         
-        debug!("TX SPI: Sending packet of {} bytes", packet.len());
-
-        // Assert SS (active low)
+        // Get serialized data
+        let data = tx_packet.as_slice();
+        
+        debug!("TX SPI: Sending {} bytes", data.len());
+        
+        // Pull SS low to start transmission
         ss.set_low();
+        Timer::after(Duration::from_micros(10)).await;
         
-        // Small delay for SS setup time
-        Timer::after(Duration::from_micros(1)).await;
-
-        // Transmit packet data
-        match spi.write(packet.as_slice()).await {
-            Ok(()) => {
-                debug!("TX SPI: Packet transmitted successfully");
-            }
-            Err(e) => {
-                error!("TX SPI: Transfer failed: {:?}", e);
-            }
-        }
-
-        // Deassert SS
+        // EasyDMA requires data in RAM - copy to local buffer
+        let mut tx_buffer = [0u8; 256];
+        let len = data.len().min(256);
+        tx_buffer[..len].copy_from_slice(&data[..len]);
+        
+        let mut rx_buffer = [0u8; 256];
+        let transfer_result = spi.transfer(&mut rx_buffer[..len], &tx_buffer[..len]).await;
+        
+        // Release SS
+        Timer::after(Duration::from_micros(10)).await;
         ss.set_high();
         
-        // Small delay before next transfer
-        Timer::after(Duration::from_micros(10)).await;
+        match transfer_result {
+            Ok(_) => {
+                debug!("TX SPI: Transfer completed successfully");
+            },
+            Err(e) => {
+                error!("TX SPI: Transfer failed: {:?}", defmt::Debug2Format(&e));
+            }
+        }
+        
+        // Release packet buffer back to pool
+        drop(tx_packet);
     }
 }
 
-/// RX SPI task - handles Host → Device communication
+/// RX SPI task - handles Host → Device communication  
+/// Receives data via SPIS1 and forwards packets to RX_CHANNEL
 #[embassy_executor::task]
 pub async fn rx_spi_task(
-    spis: TWISPI1,
-    config: RxSpiConfig,
+    ss_pin: Peri<'static, P0_07>,
+    sck_pin: Peri<'static, P0_06>,
+    mosi_pin: Peri<'static, P0_05>,
+    miso_pin: Peri<'static, P0_03>,
+    spis1: Peri<'static, TWISPI1>,
 ) {
-    info!("Starting RX SPI task");
-
-    // Configure SPI slave
-    let spi_config = spis::Config::default();
-
-    // Create SPI slave instance
-    let mut spi = Spis::new(
-        spis,
-        embassy_nrf::interrupt::take!(SPIM1_SPIS1_TWIM1_TWIS1_TWISPI1),
-        config.ss_pin,
-        config.sck_pin,
-        config.mosi_pin,
-        config.miso_pin.degrade(), // Dummy MISO
-        spi_config,
-    );
-
+    info!("Starting RX SPI task (SPIS1 - Slave)");
+    
+    let mut config = spis::Config::default();
+    config.mode = spis::Mode {
+        polarity: spis::Polarity::IdleHigh,
+        phase: spis::Phase::CaptureOnSecondTransition,
+    };
+    
+    let mut spi = Spis::new(spis1, Irqs, sck_pin, ss_pin, mosi_pin, miso_pin, config);
+    
     info!("RX SPI configured: Slave mode, CPOL=High, CPHA=Leading");
-
+    
     loop {
-        let mut rx_buffer = RxBuffer::new();
+        // Buffer for incoming data (EasyDMA requires RAM buffers)
+        let mut rx_buffer = [0u8; 256];
+        let mut tx_dummy = [0u8; 256];
         
-        debug!("RX SPI: Waiting for data from host");
-
-        // Receive data from host
-        match spi.read(rx_buffer.as_mut_slice()).await {
-            Ok(bytes_received) => {
-                if bytes_received > 0 {
-                    debug!("RX SPI: Received {} bytes", bytes_received);
+        debug!("RX SPI: Waiting for host transmission...");
+        
+        // Wait for SPI transaction from host
+        match spi.transfer(&mut rx_buffer, &tx_dummy).await {
+            Ok((rx_len, _tx_len)) => {
+                if rx_len > 0 {
+                    debug!("RX SPI: Received {} bytes", rx_len);
                     
-                    if let Err(e) = rx_buffer.set_len(bytes_received) {
-                        error!("RX SPI: Failed to set buffer length: {:?}", e);
-                        continue;
-                    }
-
-                    // Parse packet
-                    match Packet::new_request(rx_buffer.as_slice()) {
+                    // Try to parse as protocol packet
+                    match Packet::new_request(&rx_buffer[..rx_len]) {
                         Ok(packet) => {
-                            debug!("RX SPI: Parsed packet with code 0x{:04X}", packet.code);
+                            debug!("RX SPI: Valid packet received, code: {:#04x}", packet.code);
                             
                             // Send to command processor
                             if RX_CHANNEL.try_send(packet).is_err() {
-                                warn!("RX SPI: Command processor busy, dropping packet");
+                                warn!("RX SPI: RX channel full, dropping packet");
                             }
-                        }
+                        },
                         Err(e) => {
-                            error!("RX SPI: Failed to parse packet: {:?}", e);
+                            warn!("RX SPI: Invalid packet received: {:?}", e);
                         }
                     }
                 } else {
-                    debug!("RX SPI: No data received");
+                    debug!("RX SPI: Empty transfer received");
                 }
-            }
+            },
             Err(e) => {
-                error!("RX SPI: Receive failed: {:?}", e);
-                // Wait a bit before retrying
+                error!("RX SPI: Transfer error: {:?}", defmt::Debug2Format(&e));
                 Timer::after(Duration::from_millis(10)).await;
             }
         }
-        
-        // Small delay before next receive
-        Timer::after(Duration::from_millis(1)).await;
     }
 }
 
@@ -231,9 +236,41 @@ pub async fn receive_command() -> Packet {
     RX_CHANNEL.receive().await
 }
 
-/// Initialize SPI communication
-pub fn init() {
-    info!("SPI communication module initialized");
+/// Initialize SPI communication and spawn tasks
+pub async fn init_and_spawn(
+    spawner: &embassy_executor::Spawner,
+    tx_config: TxSpiConfig,
+    rx_config: RxSpiConfig,
+    spim0: Peri<'static, TWISPI0>,
+    spis1: Peri<'static, TWISPI1>,
+) -> Result<(), embassy_executor::SpawnError> {
+    info!("Initializing SPI communication...");
     info!("TX SPI: SPIM0, 8MHz, pins SCK=P0.00, SS=P0.01, MOSI=P0.04");
     info!("RX SPI: SPIS1, slave mode, pins SCK=P0.06, SS=P0.07, MOSI=P0.05");
+    
+    // Spawn TX SPI task
+    spawner.spawn(tx_spi_task(
+        tx_config.ss_pin,
+        tx_config.sck_pin,
+        tx_config.mosi_pin,
+        tx_config.miso_pin,
+        spim0,
+    ))?;
+    
+    // Spawn RX SPI task 
+    spawner.spawn(rx_spi_task(
+        rx_config.ss_pin,
+        rx_config.sck_pin,
+        rx_config.mosi_pin,
+        rx_config.miso_pin,
+        spis1,
+    ))?;
+    
+    info!("SPI tasks spawned successfully");
+    Ok(())
+}
+
+/// Legacy init function for backwards compatibility
+pub fn init() {
+    info!("SPI communication module initialized (legacy)");
 }

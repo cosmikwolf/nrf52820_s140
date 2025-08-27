@@ -3,7 +3,7 @@
 //! Handles GATT Server operations including service creation,
 //! characteristic management, and data operations.
 
-use defmt::{debug, info, warn};
+use defmt::debug;
 use nrf_softdevice::Softdevice;
 
 use crate::{

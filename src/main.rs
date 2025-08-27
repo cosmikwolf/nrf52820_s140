@@ -10,15 +10,15 @@ use nrf_softdevice::ble::advertisement_builder::{Flag, LegacyAdvertisementBuilde
 use nrf_softdevice::{Config as SdConfig, Softdevice};
 use panic_probe as _;
 
+mod buffer_pool;
+mod commands;
+mod protocol;
 mod services;
-// Temporarily disable modules while fixing compilation
-// mod protocol;
-// mod buffer_pool;
-// mod spi_comm;
-// mod state;
-// mod commands;
+mod spi_comm;
+mod state;
 
 use services::Server;
+use spi_comm::{TxSpiConfig, RxSpiConfig};
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -30,7 +30,7 @@ async fn main(spawner: Spawner) {
     nrf_config.gpiote_interrupt_priority = interrupt::Priority::P2;
     nrf_config.time_interrupt_priority = interrupt::Priority::P2;
 
-    let _peripherals = embassy_nrf::init(nrf_config);
+    let peripherals = embassy_nrf::init(nrf_config);
 
     info!("Embassy initialized, configuring SoftDevice...");
 
@@ -70,8 +70,39 @@ async fn main(spawner: Spawner) {
     // Spawn SoftDevice task (CRITICAL!)
     unwrap!(spawner.spawn(softdevice_task(sd)));
 
+    // Configure SPI peripherals
+    let tx_spi_config = TxSpiConfig {
+        ss_pin: peripherals.P0_01,
+        sck_pin: peripherals.P0_00,
+        mosi_pin: peripherals.P0_04,
+        miso_pin: peripherals.P0_02, // Dummy MISO for master mode
+    };
+    
+    let rx_spi_config = RxSpiConfig {
+        ss_pin: peripherals.P0_07,
+        sck_pin: peripherals.P0_06,
+        mosi_pin: peripherals.P0_05,
+        miso_pin: peripherals.P0_03, // Dummy MISO for slave mode
+    };
+    
+    // Initialize and spawn SPI tasks
+    unwrap!(spi_comm::init_and_spawn(
+        &spawner,
+        tx_spi_config,
+        rx_spi_config,
+        peripherals.TWISPI0,
+        peripherals.TWISPI1,
+    ).await);
+    
+    // Initialize other modules
+    state::init();
+    buffer_pool::init();
+    
     // Spawn BLE task
     unwrap!(spawner.spawn(ble_task(sd, server)));
+    
+    // Spawn command processor task
+    unwrap!(spawner.spawn(commands::command_processor_task(sd)));
 
     info!("System initialized, entering main loop");
 
@@ -126,6 +157,7 @@ async fn ble_task(sd: &'static Softdevice, bt_server: Server) {
 }
 
 // connection_task removed - now using gatt_server::run directly
+
 
 #[embassy_executor::task]
 async fn softdevice_task(sd: &'static Softdevice) -> ! {

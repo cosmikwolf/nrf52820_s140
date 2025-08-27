@@ -8,8 +8,7 @@ use defmt::{debug, info};
 use crate::{
     buffer_pool::TxPacket,
     commands::{CommandError, ResponseBuilder},
-    protocol::serialization::*,
-    state::{with_state, UuidBase},
+    state::with_state,
 };
 
 /// Handle REGISTER_UUID_GROUP command (0x0010)
@@ -25,7 +24,7 @@ pub async fn handle_register_uuid_group(payload: &[u8]) -> Result<TxPacket, Comm
     
     if payload.len() != 16 {
         debug!("UUID: Invalid payload length: {} (expected 16)", payload.len());
-        return ResponseBuilder::build_error(0x01); // Invalid length
+        return ResponseBuilder::build_error(CommandError::InvalidPayload);
     }
 
     // Extract UUID base from payload
