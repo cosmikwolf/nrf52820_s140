@@ -190,46 +190,7 @@ pub fn get_stats() -> PoolStats {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tx_packet_creation() {
-        let data = [0x01, 0x02, 0x03];
-        let packet = TxPacket::new(&data).unwrap();
-        assert_eq!(packet.as_slice(), &data);
-        assert_eq!(packet.len(), 3);
-    }
-
-    #[test]
-    fn test_rx_buffer() {
-        let mut buffer = RxBuffer::new();
-        assert!(buffer.is_empty());
-        
-        buffer.as_mut_slice()[0..3].copy_from_slice(&[0x01, 0x02, 0x03]);
-        buffer.set_len(3).unwrap();
-        
-        assert_eq!(buffer.as_slice(), &[0x01, 0x02, 0x03]);
-        assert_eq!(buffer.len(), 3);
-    }
-
-    #[test]
-    fn test_tx_queue() {
-        let mut queue = TxQueue::new();
-        assert!(queue.is_empty());
-        
-        let packet = TxPacket::new(&[0x01]).unwrap();
-        queue.enqueue(packet).unwrap();
-        
-        assert!(!queue.is_empty());
-        assert_eq!(queue.len(), 1);
-        
-        let dequeued = queue.dequeue().unwrap();
-        assert_eq!(dequeued.as_slice(), &[0x01]);
-        assert!(queue.is_empty());
-    }
-}
+// Tests moved to external test files to avoid no_std conflicts
 
 /// Initialize buffer pool
 pub fn init() {

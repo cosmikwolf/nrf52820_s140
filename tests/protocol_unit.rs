@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn test_max_payload_size() {
         // Test with maximum payload size
-        let max_payload = vec![0xAA; 243]; // Max payload for 249 byte total
+        let mut max_payload = [0xAA; 243]; // Max payload for 249 byte total
         
         // Should succeed
         let packet = Packet::new_response(ResponseCode::Ack, &max_payload).unwrap();

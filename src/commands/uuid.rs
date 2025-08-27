@@ -82,25 +82,4 @@ pub fn create_uuid_from_base_and_offset(uuid_base: &[u8; 16], offset: u16) -> [u
     result
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_create_uuid_from_base_and_offset() {
-        let base = [0x00, 0x63, 0x4C, 0xF7, 0x6F, 0x05, 0x53, 0xB6, 
-                    0xFB, 0x47, 0x75, 0x9E, 0x00, 0x00, 0xC8, 0xC3];
-        let offset = 0x0001;
-        
-        let result = create_uuid_from_base_and_offset(&base, offset);
-        
-        // Check that offset was inserted at bytes 12-13
-        assert_eq!(result[12], 0x01);
-        assert_eq!(result[13], 0x00);
-        
-        // Check that other bytes remain unchanged
-        assert_eq!(result[0], 0x00);
-        assert_eq!(result[14], 0xC8);
-        assert_eq!(result[15], 0xC3);
-    }
-}
+// Tests moved to external test files to avoid no_std conflicts
