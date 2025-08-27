@@ -4,9 +4,9 @@
 use defmt::*;
 use defmt_rtt as _;
 use embassy_executor::Spawner;
-use embassy_nrf::{interrupt, config::Config};
+use embassy_nrf::{config::Config, interrupt};
 use embassy_time::{Duration, Timer};
-use nrf_softdevice::{Softdevice, Config as SdConfig};
+use nrf_softdevice::{Config as SdConfig, Softdevice};
 use panic_probe as _;
 
 mod mgmt_service;
@@ -21,9 +21,9 @@ async fn main(spawner: Spawner) {
     // Configure interrupt priorities to avoid SoftDevice reserved levels (0, 1, 4)
     nrf_config.gpiote_interrupt_priority = interrupt::Priority::P2;
     nrf_config.time_interrupt_priority = interrupt::Priority::P2;
-    
+
     let _peripherals = embassy_nrf::init(nrf_config);
-    
+
     info!("Embassy initialized, configuring SoftDevice...");
 
     // Configure SoftDevice with basic settings
@@ -59,11 +59,14 @@ async fn main(spawner: Spawner) {
     let mgmt_server = unwrap!(ManagementServer::new(sd));
     info!("Management service initialized");
 
+    // Spawn SoftDevice task (CRITICAL!)
+    unwrap!(spawner.spawn(softdevice_task(sd)));
+
     // Spawn BLE task
     unwrap!(spawner.spawn(ble_task(sd, mgmt_server)));
 
     info!("System initialized, entering main loop");
-    
+
     // Main loop - just logging heartbeat
     loop {
         Timer::after(Duration::from_secs(10)).await;
@@ -74,38 +77,35 @@ async fn main(spawner: Spawner) {
 #[embassy_executor::task]
 async fn ble_task(sd: &'static Softdevice, mgmt_server: ManagementServer) {
     info!("Starting BLE task...");
-    
+
     info!("Starting BLE advertising...");
-    
+
     loop {
         // Create advertising data with correct format
-        let mut adv_data = heapless::Vec::<u8, 31>::new();
-        unwrap!(adv_data.extend_from_slice(&[
+        let adv_data = [
             0x02, 0x01, 0x06, // Flags: General discoverable, BR/EDR not supported
-        ]));
-        unwrap!(adv_data.extend_from_slice(&[
-            0x0C, 0x09, // Complete local name (12 bytes + type)
-        ]));
-        unwrap!(adv_data.extend_from_slice(b"MDBT50-Demo"));
+            0x0C,
+            0x09, // Complete local name (11 bytes + type byte = 12 total, length = 0x0C)
+            b'M', b'D', b'B', b'T', b'5', b'0', b'-', b'D', b'e', b'm', b'o',
+        ];
 
-        let mut scan_data = heapless::Vec::<u8, 31>::new();
-        
+        let scan_data: [u8; 0] = [];
+
         let config = nrf_softdevice::ble::peripheral::Config::default();
-        let advertisement = nrf_softdevice::ble::peripheral::ConnectableAdvertisement::ScannableUndirected { 
-            adv_data: &adv_data, 
-            scan_data: &scan_data 
-        };
-        
-        let adv = nrf_softdevice::ble::peripheral::advertise_connectable(
-            sd, 
-            advertisement,
-            &config
-        ).await;
-        
+        let advertisement =
+            nrf_softdevice::ble::peripheral::ConnectableAdvertisement::ScannableUndirected {
+                adv_data: &adv_data,
+                scan_data: &scan_data,
+            };
+
+        let adv =
+            nrf_softdevice::ble::peripheral::advertise_connectable(sd, advertisement, &config)
+                .await;
+
         match adv {
             Ok(conn) => {
                 info!("BLE connected!");
-                
+
                 // Handle the connection with management service
                 let result = connection_task(&conn, &mgmt_server).await;
                 match result {
@@ -126,7 +126,12 @@ async fn connection_task(
     mgmt_server: &ManagementServer,
 ) -> Result<(), nrf_softdevice::ble::DisconnectedError> {
     info!("Connection established, starting management service...");
-    
+
     // Run the management service for this connection
     mgmt_server.run(conn).await
+}
+
+#[embassy_executor::task]
+async fn softdevice_task(sd: &'static Softdevice) -> ! {
+    sd.run().await
 }
