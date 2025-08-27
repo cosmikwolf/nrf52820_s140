@@ -335,13 +335,13 @@ dependencies = [
 
 [[package]]
 name = "defmt-test"
-version = "0.3.3"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c1e67ff0e1c6b1a9540a1a3e04454658faacdd188c91987c444d56e469d7dea"
+checksum = "24076cc7203c365e7febfcec15d6667a9ef780bd2c5fd3b2a197400df78f299b"
 dependencies = [
  "cortex-m-rt",
  "cortex-m-semihosting",
- "defmt 0.3.100",
+ "defmt 1.0.1",
  "defmt-test-macros",
 ]
 
@@ -902,6 +902,7 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "crc",
+ "critical-section",
  "defmt 1.0.1",
  "defmt-rtt",
  "defmt-test",
@@ -912,6 +913,7 @@ dependencies = [
  "heapless 0.9.1",
  "nb 1.1.0",
  "nrf-softdevice",
+ "nrf52820-pac",
  "panic-probe",
  "postcard",
 ]

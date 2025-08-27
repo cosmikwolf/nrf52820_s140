@@ -51,13 +51,19 @@ nb = "1.0"
 # BLE Modem specific dependencies
 atomic-pool = "1.0"
 postcard = "1.0"
-crc = "3.0"  # For CRC16-CCITT validation
+crc = "3.0"         # For CRC16-CCITT validation
 
-# Testing dependencies  
-defmt-test = "0.3"
 
 [build-dependencies]
 cc = "1.0"
+
+[dev-dependencies]
+# Testing dependencies  
+defmt-test = "0.4"
+nrf52820-pac = "0.12"
+cortex-m = "0.7"
+critical-section = "1.2"
+heapless = { version = "0.9.1", default-features = false }
 
 [profile.release]
 debug = 2
@@ -66,4 +72,25 @@ opt-level = "z"
 
 [profile.dev]
 debug = 2
+opt-level = 1
+
+# Test configuration for embedded targets
+[[test]]
+name = "hello_world_test"
+harness = false
+
+# [[test]]
+# name = "protocol_tests"
+# harness = false
+#
+# [[test]]
+# name = "spi_tests"
+# harness = false
+#
+# [[test]]
+# name = "integration_tests"
+# harness = false
+
+[profile.test]
+debug = true
 opt-level = 1
