@@ -42,14 +42,10 @@ async fn main(spawner: Spawner) {
     // Configure SoftDevice with proper connection parameters
     let sd_config = SdConfig {
         clock: Some(raw::nrf_clock_lf_cfg_t {
-            // source: raw::NRF_CLOCK_LF_SRC_RC as u8,
-            // rc_ctiv: 16,
-            // rc_temp_ctiv: 2,
-            // accuracy: raw::NRF_CLOCK_LF_ACCURACY_500_PPM as u8,
             source: raw::NRF_CLOCK_LF_SRC_SYNTH as u8, // Use synthesized from 32MHz crystal
             rc_ctiv: 0,
             rc_temp_ctiv: 0,
-            accuracy: raw::NRF_CLOCK_LF_ACCURACY_500_PPM as u8,
+            accuracy: raw::NRF_CLOCK_LF_ACCURACY_50_PPM as u8,
         }),
         conn_gap: Some(raw::ble_gap_conn_cfg_t {
             conn_count: 2, // Balanced - more than minimal but less than full example
