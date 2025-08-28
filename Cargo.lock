@@ -836,7 +836,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d334027d6703534f2a80de0794ae435c0e029358d28278533d3935e69b221b01"
 dependencies = [
  "cortex-m",
- "cortex-m-rt",
 ]
 
 [[package]]
@@ -902,7 +901,6 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "crc",
- "critical-section",
  "defmt 1.0.1",
  "defmt-rtt",
  "defmt-test",
@@ -913,7 +911,6 @@ dependencies = [
  "heapless 0.9.1",
  "nb 1.1.0",
  "nrf-softdevice",
- "nrf52820-pac",
  "panic-probe",
  "postcard",
 ]
