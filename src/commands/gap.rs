@@ -7,6 +7,7 @@ use defmt::debug;
 use nrf_softdevice::{Softdevice, ble::{Address, AddressType}};
 
 use crate::{
+    advertising,
     buffer_pool::TxPacket,
     commands::{CommandError, ResponseBuilder},
     gap_state,
@@ -74,19 +75,106 @@ pub async fn handle_set_addr(payload: &[u8]) -> Result<TxPacket, CommandError> {
     response.build(crate::protocol::ResponseCode::Ack)
 }
 
-pub async fn handle_adv_start(_payload: &[u8], _sd: &Softdevice) -> Result<TxPacket, CommandError> {
-    debug!("GAP: ADV_START - placeholder implementation");
-    ResponseBuilder::build_ack()
+pub async fn handle_adv_start(payload: &[u8], _sd: &Softdevice) -> Result<TxPacket, CommandError> {
+    debug!("GAP: ADV_START");
+    
+    if payload.len() < 2 { // adv_handle + conn_cfg_tag
+        return ResponseBuilder::build_error(CommandError::InvalidPayload);
+    }
+    
+    let mut reader = PayloadReader::new(payload);
+    let adv_handle = reader.read_u8()?;
+    let conn_cfg_tag = reader.read_u8()?;
+    
+    // Send command to advertising controller
+    let cmd = advertising::AdvCommand::Start { handle: adv_handle, conn_cfg_tag };
+    
+    let result = if advertising::send_command(cmd).is_ok() {
+        nrf_softdevice::raw::NRF_SUCCESS
+    } else {
+        nrf_softdevice::raw::NRF_ERROR_NO_MEM // Command queue full
+    };
+    
+    let mut response = ResponseBuilder::new();
+    response.add_u32(result)?;
+    response.build(crate::protocol::ResponseCode::Ack)
 }
 
-pub async fn handle_adv_stop(_payload: &[u8], _sd: &Softdevice) -> Result<TxPacket, CommandError> {
-    debug!("GAP: ADV_STOP - placeholder implementation");
-    ResponseBuilder::build_ack()
+pub async fn handle_adv_stop(payload: &[u8], _sd: &Softdevice) -> Result<TxPacket, CommandError> {
+    debug!("GAP: ADV_STOP");
+    
+    if payload.len() < 1 { // adv_handle
+        return ResponseBuilder::build_error(CommandError::InvalidPayload);
+    }
+    
+    let mut reader = PayloadReader::new(payload);
+    let adv_handle = reader.read_u8()?;
+    
+    // Send command to advertising controller
+    let cmd = advertising::AdvCommand::Stop { handle: adv_handle };
+    
+    let result = if advertising::send_command(cmd).is_ok() {
+        nrf_softdevice::raw::NRF_SUCCESS
+    } else {
+        nrf_softdevice::raw::NRF_ERROR_NO_MEM // Command queue full
+    };
+    
+    let mut response = ResponseBuilder::new();
+    response.add_u32(result)?;
+    response.build(crate::protocol::ResponseCode::Ack)
 }
 
-pub async fn handle_adv_configure(_payload: &[u8]) -> Result<TxPacket, CommandError> {
-    debug!("GAP: ADV_CONFIGURE - placeholder implementation");
-    ResponseBuilder::build_ack()
+pub async fn handle_adv_configure(payload: &[u8]) -> Result<TxPacket, CommandError> {
+    debug!("GAP: ADV_CONFIGURE");
+    
+    if payload.len() < 2 { // At least handle + data present flag
+        return ResponseBuilder::build_error(CommandError::InvalidPayload);
+    }
+    
+    let mut reader = PayloadReader::new(payload);
+    let handle = reader.read_u8()?;
+    let data_present = reader.read_u8()? != 0;
+    
+    // TODO: Parse advertising parameters and data from payload
+    // For now, we'll use a simplified approach that works with the controller
+    
+    if data_present && reader.remaining() >= 4 {
+        // Read advertising data length and scan response length
+        let adv_data_len = reader.read_u16()? as usize;
+        let scan_rsp_len = reader.read_u16()? as usize;
+        
+        // Validate lengths
+        if adv_data_len <= 31 && scan_rsp_len <= 31 && 
+           reader.remaining() >= adv_data_len + scan_rsp_len {
+            
+            let adv_data = reader.read_slice(adv_data_len)?;
+            let scan_data = reader.read_slice(scan_rsp_len)?;
+            
+            // Store in gap state for the advertising controller to use
+            {
+                let mut state = gap_state::gap_state().lock().await;
+                state.set_adv_data(adv_data);
+                state.set_scan_response(scan_data);
+                state.adv_handle = handle;
+            }
+            
+            debug!("Configured advertising data: {} bytes adv, {} bytes scan", 
+                   adv_data_len, scan_rsp_len);
+        }
+    }
+    
+    // Send configure command to advertising controller
+    let cmd = advertising::AdvCommand::Configure { handle, data_present };
+    let result = if advertising::send_command(cmd).is_ok() {
+        nrf_softdevice::raw::NRF_SUCCESS
+    } else {
+        nrf_softdevice::raw::NRF_ERROR_NO_MEM
+    };
+    
+    let mut response = ResponseBuilder::new();
+    response.add_u32(result)?;
+    response.add_u8(handle)?;
+    response.build(crate::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_get_name(payload: &[u8]) -> Result<TxPacket, CommandError> {

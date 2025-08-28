@@ -420,5 +420,13 @@ pub mod serialization {
             self.offset += len;
             Ok(slice)
         }
+
+        pub fn offset(&self) -> usize {
+            self.offset
+        }
+
+        pub fn remaining(&self) -> usize {
+            self.data.len() - self.offset
+        }
     }
 }

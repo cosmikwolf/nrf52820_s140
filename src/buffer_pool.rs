@@ -12,7 +12,7 @@ pub const BUFFER_SIZE: usize = 249;
 /// Number of TX buffers (matches original C implementation)
 pub const TX_POOL_SIZE: usize = 8;
 
-/// TX buffer pool - 8 buffers of 249 bytes each
+// TX buffer pool - 8 buffers of 249 bytes each (doc comment not supported on macros)
 pool!(TxPool: [[u8; BUFFER_SIZE]; TX_POOL_SIZE]);
 
 /// RX buffer size for command reception

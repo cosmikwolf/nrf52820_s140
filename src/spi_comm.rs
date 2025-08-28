@@ -174,7 +174,7 @@ pub async fn rx_spi_task(
     loop {
         // Buffer for incoming data (EasyDMA requires RAM buffers)
         let mut rx_buffer = [0u8; 256];
-        let mut tx_dummy = [0u8; 256];
+        let tx_dummy = [0u8; 256];
         
         debug!("RX SPI: Waiting for host transmission...");
         

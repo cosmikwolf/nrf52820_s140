@@ -6,10 +6,11 @@ use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_nrf::{config::Config, interrupt};
 use embassy_time::{Duration, Timer};
-use nrf_softdevice::ble::advertisement_builder::{Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload};
+// Advertisement builder imports removed - now using advertising controller
 use nrf_softdevice::{Config as SdConfig, Softdevice};
 use panic_probe as _;
 
+mod advertising;
 mod buffer_pool;
 mod commands;
 mod gap_state;
@@ -100,10 +101,10 @@ async fn main(spawner: Spawner) {
     buffer_pool::init();
     gap_state::init().await;
     
-    // Spawn BLE task
-    unwrap!(spawner.spawn(ble_task(sd, server)));
+    // Spawn advertising task (replaces the old BLE task)
+    unwrap!(spawner.spawn(advertising::advertising_task(sd, server)));
     
-    // Spawn command processor task
+    // Spawn command processor task to handle SPI commands
     unwrap!(spawner.spawn(commands::command_processor_task(sd)));
 
     info!("System initialized, entering main loop");
@@ -115,48 +116,7 @@ async fn main(spawner: Spawner) {
     }
 }
 
-#[embassy_executor::task]
-async fn ble_task(sd: &'static Softdevice, bt_server: Server) {
-    info!("Starting BLE task...");
-
-    info!("Starting BLE advertising...");
-
-    // Create advertisement data using the builder pattern
-    static ADV_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new()
-        .flags(&[Flag::GeneralDiscovery, Flag::LE_Only])
-        .full_name("MDBT50-Demo")
-        .build();
-
-    static SCAN_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new().build();
-
-    loop {
-        // Create fresh advertising config for each iteration
-        // This matches the official nrf-softdevice example pattern
-        let config = nrf_softdevice::ble::peripheral::Config::default();
-
-        let adv = nrf_softdevice::ble::peripheral::ConnectableAdvertisement::ScannableUndirected {
-            adv_data: &ADV_DATA,
-            scan_data: &SCAN_DATA,
-        };
-
-        let conn = match nrf_softdevice::ble::peripheral::advertise_connectable(sd, adv, &config).await {
-            Ok(conn) => conn,
-            Err(e) => {
-                error!("BLE advertising failed: {:?}", defmt::Debug2Format(&e));
-                Timer::after(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
-
-        info!("advertising done!");
-
-        // Run the GATT server on the connection. This returns when the connection gets disconnected.
-        use nrf_softdevice::ble::gatt_server;
-        let e = gatt_server::run(&conn, &bt_server, |_| {}).await;
-
-        info!("gatt_server run exited with error: {:?}", defmt::Debug2Format(&e));
-    }
-}
+// BLE task is now replaced by advertising::advertising_task
 
 // connection_task removed - now using gatt_server::run directly
 

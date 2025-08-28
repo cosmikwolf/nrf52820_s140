@@ -67,7 +67,7 @@ embedded-alloc = "0.6"
 [dev-dependencies.proptest]
 version = "1.0"
 default-features = false
-features = ["no_std", "alloc"]
+features = ["no_std", "alloc", "unstable"]
 
 [profile.release]
 debug = 2

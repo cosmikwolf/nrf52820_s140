@@ -5,6 +5,7 @@
 //! This library provides the core functionality for the BLE modem firmware,
 //! exposing modules for testing and reuse.
 
+pub mod advertising;
 pub mod buffer_pool;
 pub mod commands;
 pub mod gap_state;
