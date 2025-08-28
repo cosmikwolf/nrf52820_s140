@@ -32,6 +32,7 @@ pub fn validate_crc16(data: &[u8], expected_crc: u16) -> bool {
 pub enum RequestCode {
     // System Commands
     GetInfo = 0x0001,
+    Echo = 0x0003,
     Shutdown = 0x0002,
     Reboot = 0x00F0,
 

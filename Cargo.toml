@@ -87,6 +87,10 @@ harness = false
 name = "integration_tests"
 harness = false
 
+[[test]]
+name = "command_tests"
+harness = false
+
 [profile.test]
 debug = true
 opt-level = 1

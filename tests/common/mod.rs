@@ -6,7 +6,7 @@
 //! - Test helpers
 
 // Re-export commonly used items for tests (except conflicting macros)
-pub use defmt::info;
+pub use defmt::{error, info, warn};
 pub use defmt_rtt as _; // global logger
 pub use panic_probe as _; // panic handler
 
@@ -26,6 +26,21 @@ pub fn create_test_data(size: usize, pattern: u8) -> heapless::Vec<u8, 256> {
         data.push(pattern.wrapping_add(i as u8)).unwrap();
     }
     data
+}
+
+/// Test helper to compare byte arrays
+pub fn arrays_equal(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+
+    for (x, y) in a.iter().zip(b.iter()) {
+        if x != y {
+            return false;
+        }
+    }
+
+    true
 }
 
 /// Test helper for logging test progress

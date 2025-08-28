@@ -141,6 +141,7 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
     let response = match request_code {
         // System Commands
         RequestCode::GetInfo => system::handle_get_info(&packet.payload).await,
+        RequestCode::Echo => system::handle_echo(&packet.payload).await,
         RequestCode::Shutdown => system::handle_shutdown(&packet.payload).await,
         RequestCode::Reboot => system::handle_reboot(&packet.payload).await,
 
@@ -240,6 +241,7 @@ impl CommandProcessor {
         match request_code {
             // System Commands
             RequestCode::GetInfo => system::handle_get_info(&packet.payload).await,
+            RequestCode::Echo => system::handle_echo(&packet.payload).await,
             RequestCode::Shutdown => system::handle_shutdown(&packet.payload).await,
             RequestCode::Reboot => system::handle_reboot(&packet.payload).await,
 

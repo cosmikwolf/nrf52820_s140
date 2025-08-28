@@ -27,6 +27,18 @@ pub async fn handle_get_info(_payload: &[u8]) -> Result<TxPacket, CommandError> 
     response.build(crate::protocol::ResponseCode::Ack)
 }
 
+/// Handle ECHO command (0x0003)
+/// Echoes back the payload data
+pub async fn handle_echo(payload: &[u8]) -> Result<TxPacket, CommandError> {
+    info!("System: ECHO requested with {} bytes", payload.len());
+    
+    let mut response = ResponseBuilder::new();
+    response.add_slice(payload)?;
+    
+    info!("System: Echoing back {} bytes", payload.len());
+    response.build(crate::protocol::ResponseCode::Ack)
+}
+
 /// Handle SHUTDOWN command (0x0002)
 /// Powers down the system
 pub async fn handle_shutdown(_payload: &[u8]) -> Result<TxPacket, CommandError> {
