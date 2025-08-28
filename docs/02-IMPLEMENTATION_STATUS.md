@@ -1,12 +1,35 @@
 # Implementation Status & Overview
 
 ## Current Status
-- **Phase**: Testing Infrastructure Complete (Phase 2)
-- **Next Phase**: GAP Operations Implementation (Phase 3A)
+- **Phase**: GAP Operations Implementation (Phase 3A) - IN PROGRESS
+- **Progress**: Device Identity Management Complete ✅
+- **Next Phase**: Advertising Control & Configuration (Phase 3A Continuation)
 - **Testing Framework**: defmt-test with property-based testing using proptest (no_std)
 - **Architecture**: BLE Proxy/Passthrough matching C firmware requirements
 
 ## Completed Components
+
+### GAP Device Identity Management (Phase 3A - Partial) ✅
+- [x] Memory-optimized GAP state module (gap_state.rs)
+  - Total size: ~152 bytes (well within budget)
+  - Packed structures with static allocation
+  - Device name: 32 bytes + length
+  - Device address: 6 bytes + type
+  - Advertising data: 31 bytes + scan response 31 bytes
+  - Connection parameters: 8 bytes
+  - Status flags: 1 byte (bit-packed)
+- [x] Device address management (REQ_GAP_GET_ADDR/SET_ADDR)
+  - Uses nrf-softdevice Address wrapper for type safety
+  - Supports all BLE address types (Public, Random Static, etc.)
+  - Internal state synchronization with SoftDevice
+- [x] Device name configuration (REQ_GAP_GET_NAME/SET_NAME)
+  - SoftDevice API integration with security mode handling
+  - Length validation and truncation
+  - UTF-8 compatible (matches C firmware)
+- [x] Connection parameters management (REQ_GAP_CONN_PARAMS_GET/SET)
+  - PPCP (Peripheral Preferred Connection Parameters) support
+  - All standard connection intervals and timeouts
+  - Slave latency and supervision timeout handling
 
 ### Testing Infrastructure (Phase 2) ✅
 - [x] defmt-test framework setup for nRF52820 hardware testing
@@ -39,11 +62,14 @@ Based on `/docs/01-BLE_MODEM_ANALYSIS.md`:
 
 ## Next Implementation Phases
 
-### Phase 3A: GAP Operations (Next)
-- Device address management (get/set)
-- Device name configuration
-- Advertising control (start/stop/configure)
-- Connection parameter management
+### Phase 3A: GAP Operations (IN PROGRESS)
+- [x] Device address management (get/set) ✅
+- [x] Device name configuration (get/set) ✅
+- [x] Connection parameter management (get/set) ✅
+- [x] Memory-optimized GAP state module (~152 bytes) ✅
+- [ ] Advertising configuration parsing
+- [ ] Advertising control (start/stop)
+- [ ] GAP hardware integration tests
 
 ### Phase 3B: GATT Foundation
 - Service registration
@@ -69,9 +95,9 @@ Based on `/docs/01-BLE_MODEM_ANALYSIS.md`:
 - **Available Flash**: 100KB (256KB - 156KB SoftDevice)
 - **Available RAM**: 16KB (32KB - 16KB SoftDevice)
 
-### Current Memory Usage
-- **Flash**: 30.3KB used, 69.7KB available ✅ **Comfortable**
-- **RAM**: ~10-11KB used, ~5-6KB available ⚠️ **TIGHT**
+### Current Memory Usage (with GAP Device Identity)
+- **Flash**: 31.7KB used (+15.6KB from baseline), 68.3KB available ✅ **Comfortable**
+- **RAM BSS**: 9.9KB used (+0.5KB from baseline), 6.1KB available ⚠️ **TIGHT**
 
 ### Full Implementation Estimates
 - **Flash**: 45-55KB total ✅ **Feasible** 

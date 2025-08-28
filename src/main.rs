@@ -12,6 +12,7 @@ use panic_probe as _;
 
 mod buffer_pool;
 mod commands;
+mod gap_state;
 mod protocol;
 mod services;
 mod spi_comm;
@@ -97,6 +98,7 @@ async fn main(spawner: Spawner) {
     // Initialize other modules
     state::init();
     buffer_pool::init();
+    gap_state::init().await;
     
     // Spawn BLE task
     unwrap!(spawner.spawn(ble_task(sd, server)));

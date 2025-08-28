@@ -117,6 +117,7 @@ pub enum ProtocolError {
     SerializationError,
     BufferFull,
     InvalidCrc,
+    InvalidData,
 }
 
 impl RequestCode {
@@ -363,5 +364,61 @@ pub mod serialization {
             data[offset + 2], 
             data[offset + 3]
         ]))
+    }
+
+    /// Helper for reading from payload sequentially
+    pub struct PayloadReader<'a> {
+        data: &'a [u8],
+        offset: usize,
+    }
+
+    impl<'a> PayloadReader<'a> {
+        pub fn new(data: &'a [u8]) -> Self {
+            Self { data, offset: 0 }
+        }
+
+        pub fn read_u8(&mut self) -> Result<u8, ProtocolError> {
+            if self.offset >= self.data.len() {
+                return Err(ProtocolError::InvalidData);
+            }
+            let value = self.data[self.offset];
+            self.offset += 1;
+            Ok(value)
+        }
+
+        pub fn read_u16(&mut self) -> Result<u16, ProtocolError> {
+            if self.offset + 2 > self.data.len() {
+                return Err(ProtocolError::InvalidData);
+            }
+            let value = u16::from_be_bytes([
+                self.data[self.offset],
+                self.data[self.offset + 1]
+            ]);
+            self.offset += 2;
+            Ok(value)
+        }
+
+        pub fn read_u32(&mut self) -> Result<u32, ProtocolError> {
+            if self.offset + 4 > self.data.len() {
+                return Err(ProtocolError::InvalidData);
+            }
+            let value = u32::from_be_bytes([
+                self.data[self.offset],
+                self.data[self.offset + 1],
+                self.data[self.offset + 2],
+                self.data[self.offset + 3]
+            ]);
+            self.offset += 4;
+            Ok(value)
+        }
+
+        pub fn read_slice(&mut self, len: usize) -> Result<&'a [u8], ProtocolError> {
+            if self.offset + len > self.data.len() {
+                return Err(ProtocolError::InvalidData);
+            }
+            let slice = &self.data[self.offset..self.offset + len];
+            self.offset += len;
+            Ok(slice)
+        }
     }
 }

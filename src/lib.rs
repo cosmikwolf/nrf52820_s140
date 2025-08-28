@@ -7,6 +7,7 @@
 
 pub mod buffer_pool;
 pub mod commands;
+pub mod gap_state;
 pub mod protocol;
 pub mod services;
 pub mod spi_comm;
