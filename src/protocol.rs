@@ -126,6 +126,7 @@ impl RequestCode {
         match value {
             0x0001 => Some(Self::GetInfo),
             0x0002 => Some(Self::Shutdown),
+            0x0003 => Some(Self::Echo),
             0x00F0 => Some(Self::Reboot),
             0x0010 => Some(Self::RegisterUuidGroup),
             0x0011 => Some(Self::GapGetAddr),

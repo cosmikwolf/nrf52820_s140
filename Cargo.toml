@@ -99,6 +99,10 @@ harness = false
 name = "command_tests"
 harness = false
 
+[[test]]
+name = "echo_integration_test"
+harness = false
+
 [profile.test]
 debug = true
 opt-level = 1

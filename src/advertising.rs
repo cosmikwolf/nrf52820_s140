@@ -256,10 +256,32 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                         controller.advertising_requested = false; // Stop advertising when connected
                     }
                     
-                    // Run GATT server on the connection
+                    // Run GATT server on the connection with event forwarding
                     use nrf_softdevice::ble::gatt_server;
-                    let result = gatt_server::run(&conn, &bt_server, |_| {}).await;
+                    
+                    // Forward connection event to host
+                    let connected_event = crate::events::create_connected_event(&conn);
+                    if let Err(_) = crate::events::forward_event_to_host(connected_event).await {
+                        debug!("Failed to forward connection event to host");
+                    }
+                    
+                    let result = gatt_server::run(&conn, &bt_server, |event| {
+                        // Forward GATT server events to host
+                        debug!("GATT server event received: {:?}", defmt::Debug2Format(&event));
+                        
+                        // Note: We can't await in this closure, so event forwarding
+                        // is handled in the Server::on_write implementation
+                    }).await;
                     debug!("GATT server connection ended: {:?}", defmt::Debug2Format(&result));
+                    
+                    // Forward disconnection event to host
+                    let disconnected_event = crate::events::create_disconnected_event(
+                        conn.handle().unwrap_or(0),
+                        0x13 // BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION - would be actual reason code
+                    );
+                    if let Err(_) = crate::events::forward_event_to_host(disconnected_event).await {
+                        debug!("Failed to forward disconnection event to host");
+                    }
                     
                     // Update connection state
                     {

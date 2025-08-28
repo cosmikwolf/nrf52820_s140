@@ -13,7 +13,10 @@ use panic_probe as _;
 mod advertising;
 mod buffer_pool;
 mod commands;
+mod dynamic_gatt;
+mod events;
 mod gap_state;
+mod gatt_registry;
 mod protocol;
 mod services;
 mod spi_comm;
@@ -106,6 +109,8 @@ async fn main(spawner: Spawner) {
     
     // Spawn command processor task to handle SPI commands
     unwrap!(spawner.spawn(commands::command_processor_task(sd)));
+    
+    // Event forwarding is now handled directly in the advertising task
 
     info!("System initialized, entering main loop");
 

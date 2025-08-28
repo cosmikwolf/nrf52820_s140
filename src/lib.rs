@@ -8,7 +8,10 @@
 pub mod advertising;
 pub mod buffer_pool;
 pub mod commands;
+pub mod dynamic_gatt;
+pub mod events;
 pub mod gap_state;
+pub mod gatt_registry;
 pub mod protocol;
 pub mod services;
 pub mod spi_comm;
