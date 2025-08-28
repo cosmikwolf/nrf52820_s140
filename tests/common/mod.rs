@@ -6,7 +6,6 @@
 //! - Test helpers
 
 // Re-export commonly used items for tests (except conflicting macros)
-pub use defmt::{error, info, warn};
 pub use defmt_rtt as _; // global logger
 // Also need the same embassy dependencies as the main firmware
 pub use embassy_executor as _;
@@ -17,7 +16,6 @@ pub use {embassy_nrf as _, embassy_sync as _, embassy_time as _};
 
 // Global allocator for proptest (required for alloc feature in no_std)
 pub extern crate alloc;
-pub use alloc::vec::Vec;
 pub use alloc::vec;
 
 pub use embedded_alloc::LlffHeap as Heap;
@@ -36,7 +34,9 @@ static HEAP_INITIALIZED: AtomicBool = AtomicBool::new(false);
 pub fn ensure_heap_initialized() {
     if !HEAP_INITIALIZED.swap(true, Ordering::Relaxed) {
         unsafe {
-            HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_MEM.len());
+            let ptr = HEAP_MEM.as_mut_ptr();
+            let len = HEAP_MEM.len();
+            HEAP.init(ptr as usize, len);
         }
     }
 }
@@ -65,26 +65,4 @@ pub fn arrays_equal(a: &[u8], b: &[u8]) -> bool {
     true
 }
 
-/// Test state shared across unit tests
-pub struct TestState {
-    pub heap_initialized: bool,
-}
-
-impl TestState {
-    pub fn new() -> Self {
-        Self {
-            heap_initialized: false,
-        }
-    }
-
-    /// Initialize the heap allocator if not already done
-    pub fn ensure_heap_initialized(&mut self) {
-        if !self.heap_initialized {
-            unsafe {
-                HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_MEM.len());
-            }
-            self.heap_initialized = true;
-        }
-    }
-}
 

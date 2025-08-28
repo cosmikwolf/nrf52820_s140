@@ -11,12 +11,12 @@ mod tests {
     use defmt::{assert, assert_eq};
 
     use super::*;
-    use crate::common::*;
+    
 
     #[test]
     fn test_get_info_command() {
         // Test the GetInfo command handler directly
-        let payload: &[u8] = &[];
+        let _payload: &[u8] = &[];
 
         // This is a sync test, but the handler is async, so we test the logic
         // In a real scenario, this would be tested with hardware/integration tests

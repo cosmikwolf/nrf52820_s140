@@ -5,13 +5,14 @@
 mod common;
 
 use nrf52820_s140_firmware::buffer_pool::{BufferError, RxBuffer, TxPacket, TX_POOL_SIZE};
-use nrf52820_s140_firmware::protocol::{Packet, RequestCode, ProtocolError, calculate_crc16};
+use nrf52820_s140_firmware::protocol::{Packet, RequestCode, ProtocolError};
 use proptest::prelude::*;
 
 #[defmt_test::tests]
 mod tests {
     use common::*;
     use defmt::{assert, assert_eq};
+    use alloc::vec::Vec;
 
     use super::*;
 

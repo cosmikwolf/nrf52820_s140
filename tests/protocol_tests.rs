@@ -63,7 +63,7 @@ mod tests {
             (b"A" as &[u8], "single character"),
         ];
 
-        for (data, description) in &test_cases {
+        for (data, _description) in &test_cases {
             let crc = calculate_crc16(data);
 
             // Verify validation works

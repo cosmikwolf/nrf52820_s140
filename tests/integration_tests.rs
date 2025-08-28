@@ -11,7 +11,7 @@ use nrf52820_s140_firmware::commands::CommandError;
 mod tests {
     use super::*;
     use crate::common::*;
-    use defmt::{assert, assert_eq, assert_ne};
+    use defmt::{assert, assert_eq};
 
     #[test]
     fn test_modem_state_initialization() {
@@ -83,7 +83,7 @@ mod tests {
             0x9e, 0x73, 0x12, 0xe0, 0x23, 0x54, 0x11, 0xeb,
             0x9f, 0x10, 0xfb, 0xc3, 0x0a, 0x62, 0xcf, 0x38
         ];
-        let base_handle = state.register_uuid_base(uuid_base).unwrap();
+        let _base_handle = state.register_uuid_base(uuid_base).unwrap();
 
         // Add a service (note: using available method add_service)
         let service_handle = 1;

@@ -12,13 +12,13 @@ mod tests {
 
     use crate::common::*;
 
+    #[init]
+    fn init() {
+        ensure_heap_initialized();
+    }
+
     #[test]
     fn test_basic_arithmetic() {
-        // Initialize the heap allocator (only needed once)
-        use core::mem::MaybeUninit;
-        unsafe {
-            HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_MEM.len());
-        }
 
         assert_eq!(2 + 2, 4);
         assert_eq!(10 - 5, 5);
