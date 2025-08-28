@@ -60,6 +60,14 @@ cc = "1.0"
 [dev-dependencies]
 # Testing dependencies
 defmt-test = "0.4"
+# Global allocator for no_std testing
+embedded-alloc = "0.6"
+
+# Property-based testing with no_std support
+[dev-dependencies.proptest]
+version = "1.0"
+default-features = false
+features = ["no_std", "alloc"]
 
 [profile.release]
 debug = 2
