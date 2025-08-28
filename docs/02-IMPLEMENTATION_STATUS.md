@@ -63,12 +63,33 @@ Based on `/docs/01-BLE_MODEM_ANALYSIS.md`:
 - Performance optimization
 - Documentation completion
 
+## Memory Constraints Analysis ⚠️
+
+### Hardware Limitations (nRF52820)
+- **Available Flash**: 100KB (256KB - 156KB SoftDevice)
+- **Available RAM**: 16KB (32KB - 16KB SoftDevice)
+
+### Current Memory Usage
+- **Flash**: 30.3KB used, 69.7KB available ✅ **Comfortable**
+- **RAM**: ~10-11KB used, ~5-6KB available ⚠️ **TIGHT**
+
+### Full Implementation Estimates
+- **Flash**: 45-55KB total ✅ **Feasible** 
+- **RAM**: 14-16KB total ⚠️ **At limit** - requires aggressive optimization
+
+### Critical RAM Consumers
+- TX Buffer Pool: 2KB (fixed, cannot reduce)
+- Embassy Tasks: 4-5KB (6 async tasks × ~1KB each)
+- Event System: 1-2KB (planned)
+- Stack/Static: 3-4KB
+
 ## Technical Decisions Made
 
 1. **Property Testing**: Using proptest for invariant testing with embedded-alloc
 2. **PAC Resolution**: Disabled default embassy-nrf features to avoid nrf-pac conflicts
 3. **Testing Strategy**: Hardware-based testing with defmt-test (not simulation)
 4. **Architecture Compliance**: Full BLE proxy implementation (not simplified version)
+5. **Memory Strategy**: Aggressive optimization required - size-first approach mandatory
 
 ## Files Organization
 - `docs/01-BLE_MODEM_ANALYSIS.md` - Requirements analysis (preserved)

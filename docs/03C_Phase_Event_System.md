@@ -10,6 +10,8 @@ Implement comprehensive BLE event forwarding to match the C firmware's event-dri
 - [ ] Event transmission over TX SPI with proper response codes
 - [ ] Event buffering handles burst scenarios
 - [ ] System events (SOC) also forwarded when relevant
+- [ ] **CRITICAL CONSTRAINT**: Implementation must fit in remaining 1-2KB RAM
+- [ ] **Performance**: Event latency < 5ms to prevent SoftDevice overflow
 
 ## Event Categories
 
@@ -187,33 +189,31 @@ impl EventHandler {
 }
 ```
 
-### Task 4: Event Buffer Management
+### Task 4: Memory-Constrained Event Buffer Management
 **File**: `src/event_handler.rs`
 
 ```rust
-// Event processing must handle burst scenarios where events arrive faster
-// than they can be transmitted over SPI
+// MEMORY CRITICAL: Minimize event queue size to fit in remaining RAM budget
 
-pub const EVENT_QUEUE_SIZE: usize = 16;
+pub const EVENT_QUEUE_SIZE: usize = 4; // Reduced from 16 to 4 (save ~3KB RAM)
 
 pub struct EventQueue {
+    // Use existing TX buffer pool instead of separate event buffers
     queue: Channel<NoopRawMutex, TxPacket, EVENT_QUEUE_SIZE>,
-    drop_counter: AtomicU32,
+    drop_counter: AtomicU32, // 4 bytes only
 }
 
 impl EventQueue {
     pub async fn enqueue(&self, event: TxPacket) {
+        // Aggressive dropping strategy for memory constraints
         match self.queue.try_send(event) {
             Ok(()) => {},
             Err(_) => {
-                // Queue full - increment drop counter and drop oldest event
+                // Queue full - drop immediately, no retry
                 self.drop_counter.fetch_add(1, Ordering::Relaxed);
-                warn!("Event queue overflow - dropping event");
                 
-                // Try to make room by dropping one event
-                if let Ok(_dropped) = self.queue.try_receive() {
-                    let _ = self.queue.try_send(event);
-                }
+                // CRITICAL: Return TxPacket to pool immediately
+                drop(event); // This returns to TX_POOL
             }
         }
     }
@@ -222,6 +222,9 @@ impl EventQueue {
         self.queue.receive().await
     }
 }
+
+// Total memory impact: 4 * (TxPacket ref) + 4 bytes = minimal
+// Reuses existing TX buffer pool - no additional allocation
 ```
 
 ## Data Structures

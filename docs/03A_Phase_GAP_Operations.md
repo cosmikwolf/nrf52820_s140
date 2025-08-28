@@ -10,6 +10,8 @@ Implement core GAP (Generic Access Profile) operations to match the C firmware c
 - [ ] Advertising can be started, stopped, and configured with custom data
 - [ ] Connection parameters can be managed
 - [ ] All operations tested with hardware tests
+- [ ] **Memory constraint**: RAM usage increase < 2KB total
+- [ ] **Performance**: No significant latency increase vs C firmware
 
 ## Required Commands
 
@@ -114,10 +116,11 @@ pub async fn handle_adv_configure(_payload: &[u8]) -> Result<TxPacket, CommandEr
 - `nrf_softdevice::ble::gap::ConnectableAdvertisement`
 - Advertising data configuration structures
 
-## Data Structures Needed
+## Data Structures Needed (Memory-Optimized)
 
-### Address Structure
+### Address Structure (7 bytes)
 ```rust
+#[repr(packed)]
 #[derive(Clone, Copy)]
 pub struct BleAddress {
     pub addr: [u8; 6],
@@ -125,16 +128,32 @@ pub struct BleAddress {
 }
 ```
 
-### Advertising Configuration
+### Advertising Configuration (Compact - 74 bytes max)
 ```rust
+#[repr(packed)]
 pub struct AdvConfig {
-    pub data: heapless::Vec<u8, 31>,        // Advertising data (max 31 bytes)
-    pub scan_response: heapless::Vec<u8, 31>, // Scan response data (max 31 bytes)
-    pub interval_min: u16,                   // Advertising interval min (0.625ms units)
-    pub interval_max: u16,                   // Advertising interval max (0.625ms units)
-    pub timeout: u16,                        // Advertising timeout (seconds, 0 = no timeout)
-    pub adv_type: u8,                        // Advertising type
+    pub data: [u8; 31],           // Advertising data buffer
+    pub scan_response: [u8; 31],  // Scan response buffer  
+    pub data_len: u8,             // Actual data length
+    pub scan_len: u8,             // Actual scan response length
+    pub interval_min: u16,        // Advertising interval min (0.625ms units)
+    pub interval_max: u16,        // Advertising interval max (0.625ms units)
+    pub timeout: u16,             // Advertising timeout (seconds)
+    pub adv_type: u8,             // Advertising type
 }
+
+// Memory impact: Single static instance ~74 bytes vs dynamic allocation
+```
+
+### Memory Budget Allocation
+```rust
+// Phase 3A estimated RAM usage:
+// - Static advertising config: 74 bytes
+// - Device name storage: 32 bytes  
+// - Connection params cache: 16 bytes
+// - State flags: 4 bytes
+// - Stack overhead: ~1KB
+// Total: ~1.2KB (within 2KB budget)
 ```
 
 ## Testing Strategy

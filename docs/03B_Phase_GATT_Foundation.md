@@ -10,6 +10,8 @@ Implement GATT Server operations to enable dynamic service creation and characte
 - [ ] Notifications and indications can be sent
 - [ ] System attributes (bonding) supported
 - [ ] All operations validated with hardware tests
+- [ ] **CRITICAL**: Total RAM usage < 15KB (1KB remaining buffer)
+- [ ] **Memory efficiency**: Service registry < 1KB, characteristics < 1KB
 
 ## Required Commands
 
@@ -120,33 +122,50 @@ pub async fn handle_mtu_reply(payload: &[u8]) -> Result<TxPacket, CommandError> 
 
 ## Data Structures Needed
 
-### Service Registry
+### Memory-Optimized Service Registry
 ```rust
 use heapless::{FnvIndexMap, Vec};
 
-#[derive(Clone)]
+// Compact service representation - 8 bytes per service
+#[repr(packed)]
+#[derive(Clone, Copy)]
 pub struct ServiceInfo {
     pub handle: u16,
-    pub uuid: BleUuid,
-    pub service_type: ServiceType, // Primary or Secondary
+    pub uuid_type: u8,    // 0=16bit, 1=128bit, 2=vendor_specific
+    pub uuid_data: u16,   // 16-bit UUID or index into UUID table
+    pub service_type: u8, // Primary=1, Secondary=2
+    pub _reserved: u8,    // Alignment
 }
 
-#[derive(Clone)]  
+// Compact characteristic representation - 12 bytes per characteristic
+#[repr(packed)]
+#[derive(Clone, Copy)]  
 pub struct CharacteristicInfo {
-    pub handle: u16,
+    pub service_handle: u16,
     pub value_handle: u16,
-    pub cccd_handle: Option<u16>,
-    pub sccd_handle: Option<u16>,
-    pub uuid: BleUuid,
-    pub properties: CharProperties,
+    pub cccd_handle: u16,     // 0 if not present
+    pub sccd_handle: u16,     // 0 if not present
+    pub uuid_data: u16,       // Same format as ServiceInfo
+    pub properties: u8,       // Packed properties
+    pub uuid_type: u8,        // UUID type
 }
 
+// Memory-constrained registry - total ~768 bytes max
 pub struct GattRegistry {
-    pub services: FnvIndexMap<u16, ServiceInfo, 16>,
-    pub characteristics: FnvIndexMap<u16, CharacteristicInfo, 64>,
+    // Reduce limits based on nRF52820 attribute table constraints
+    pub services: [ServiceInfo; 8],         // 8 * 8 = 64 bytes
+    pub characteristics: [CharacteristicInfo; 32], // 32 * 12 = 384 bytes
+    pub service_count: u8,
+    pub char_count: u8,
     pub next_service_id: u16,
     pub next_char_id: u16,
+    
+    // UUID table for 128-bit UUIDs (4 * 16 = 64 bytes)
+    pub uuid_bases: [[u8; 16]; 4],
+    pub uuid_base_count: u8,
 }
+
+// Total registry size: ~512 bytes (much smaller than FnvIndexMap approach)
 ```
 
 ### UUID Handling
