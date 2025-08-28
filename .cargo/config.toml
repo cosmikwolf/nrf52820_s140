@@ -19,3 +19,7 @@ target = "thumbv7em-none-eabihf"
 
 [env]
 DEFMT_LOG = "info"
+
+
+[alias]
+test-all = "test --test hello_world_test --test protocol_tests --test spi_tests --test integration_tests --test command_tests"

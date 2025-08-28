@@ -8,16 +8,38 @@
 // Re-export commonly used items for tests (except conflicting macros)
 pub use defmt::{error, info, warn};
 pub use defmt_rtt as _; // global logger
-pub use panic_probe as _; // panic handler
-
-// Use nrf-softdevice which provides both interrupt vectors and critical section
-pub use nrf_softdevice as _;
-
 // Also need the same embassy dependencies as the main firmware
 pub use embassy_executor as _;
-pub use embassy_nrf as _;
-pub use embassy_sync as _;
-pub use embassy_time as _;
+// Use nrf-softdevice which provides both interrupt vectors and critical section
+pub use nrf_softdevice as _;
+pub use panic_probe as _; // panic handler
+pub use {embassy_nrf as _, embassy_sync as _, embassy_time as _};
+
+// Global allocator for proptest (required for alloc feature in no_std)
+pub extern crate alloc;
+pub use alloc::vec::Vec;
+pub use alloc::vec;
+
+pub use embedded_alloc::LlffHeap as Heap;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+#[global_allocator]
+pub static HEAP: Heap = Heap::empty();
+
+// Define the global allocator backing store - 8KB heap for more complex tests
+pub static mut HEAP_MEM: [u8; 8192] = [0; 8192];
+
+// Global flag to ensure heap is only initialized once
+static HEAP_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+/// Ensure heap is initialized exactly once (thread-safe)
+pub fn ensure_heap_initialized() {
+    if !HEAP_INITIALIZED.swap(true, Ordering::Relaxed) {
+        unsafe {
+            HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_MEM.len());
+        }
+    }
+}
 
 /// Test helper to create test data arrays
 pub fn create_test_data(size: usize, pattern: u8) -> heapless::Vec<u8, 256> {
@@ -43,12 +65,26 @@ pub fn arrays_equal(a: &[u8], b: &[u8]) -> bool {
     true
 }
 
-/// Test helper for logging test progress
-pub fn log_test_start(test_name: &str) {
-    info!("🧪 Starting test: {}", test_name);
+/// Test state shared across unit tests
+pub struct TestState {
+    pub heap_initialized: bool,
 }
 
-pub fn log_test_pass(test_name: &str) {
-    info!("✅ Test passed: {}", test_name);
+impl TestState {
+    pub fn new() -> Self {
+        Self {
+            heap_initialized: false,
+        }
+    }
+
+    /// Initialize the heap allocator if not already done
+    pub fn ensure_heap_initialized(&mut self) {
+        if !self.heap_initialized {
+            unsafe {
+                HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_MEM.len());
+            }
+            self.heap_initialized = true;
+        }
+    }
 }
 

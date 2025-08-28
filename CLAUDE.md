@@ -1,0 +1,2 @@
+- do not add unnecessary prints in defmt::tests
+- ensure all tests have proper asserts
