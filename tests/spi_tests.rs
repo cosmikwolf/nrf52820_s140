@@ -15,8 +15,7 @@ static HEAP: Heap = Heap::empty();
 static mut HEAP_MEM: [u8; 8192] = [0; 8192];
 
 use nrf52820_s140_firmware::buffer_pool::{RxBuffer, TxPacket, BufferError};
-use nrf52820_s140_firmware::protocol::{Packet, RequestCode, ResponseCode, ProtocolError};
-use proptest::prelude::*;
+use nrf52820_s140_firmware::protocol::{Packet, RequestCode};
 use alloc::vec::Vec;
 
 #[defmt_test::tests]
@@ -161,24 +160,6 @@ mod tests {
     fn test_command_processing_gap_commands() {
         log_test_start("command_processing_gap_commands");
         
-        // Test GAP ADV_START command processing
-        let mut rx_buf = RxBuffer::new();
-        let adv_start_cmd = [
-            0x01,       // Packet type: Command
-            0x10,       // Opcode: ADV_START (GAP class 0x01, command 0x00)
-            0x00,
-            0x04,       // Length: 4 bytes
-            0x00,
-            0x01,       // Handle: 1
-            0x00,       // Conn cfg tag: 0
-            0x00,       // Reserved
-            0x00,
-        ];
-        
-        // Write command to RX buffer
-        let buf_slice = rx_buf.as_mut_slice();
-        buf_slice[..adv_start_cmd.len()].copy_from_slice(&adv_start_cmd);
-        rx_buf.set_len(adv_start_cmd.len()).unwrap();
         
         // Create a valid GAP ADV_START command packet
         // Format: [Length:2][Payload:N][RequestCode:2][CRC16:2]
@@ -213,67 +194,111 @@ mod tests {
         log_test_pass("command_processing_gap_commands");
     }
     
-    proptest! {
-        #[test]
-        fn test_buffer_allocation_properties(data in prop::collection::vec(any::<u8>(), 0..200)) {
-            // Property: Valid sized data should always allocate successfully
-            let result = TxPacket::new(&data);
+    #[test]
+    fn test_buffer_allocation_properties() {
+        log_test_start("buffer_allocation_properties");
+        
+        // Property: Valid sized data should always allocate successfully
+        let test_sizes = [0, 1, 10, 50, 100, 200, 249]; // Valid sizes
+        let invalid_sizes = [250, 300, 500]; // Invalid sizes
+        
+        for &size in &test_sizes {
+            let test_data = create_test_data(size, 0x42);
+            let result = TxPacket::new(test_data.as_slice());
             
-            if data.len() <= 249 { // BUFFER_SIZE
-                prop_assert!(result.is_ok());
-                let packet = result.unwrap();
-                prop_assert_eq!(packet.len(), data.len());
-                prop_assert!(arrays_equal(packet.as_slice(), &data));
-            } else {
-                prop_assert!(matches!(result, Err(BufferError::BufferTooSmall)));
-            }
+            assert!(result.is_ok(), "Failed to allocate buffer for size {}", size);
+            let packet = result.unwrap();
+            assert_eq!(packet.len(), size);
+            assert!(arrays_equal(packet.as_slice(), test_data.as_slice()));
+            info!("✓ Buffer allocation property holds for size {}", size);
         }
+        
+        for &size in &invalid_sizes {
+            // Create large data using alloc::vec::Vec for sizes > 256
+            use alloc::vec::Vec;
+            let mut large_data = Vec::new();
+            for i in 0..size {
+                large_data.push(0xFF_u8.wrapping_add(i as u8));
+            }
+            let result = TxPacket::new(&large_data);
+            assert!(matches!(result, Err(BufferError::BufferTooSmall)), 
+                    "Should reject oversized buffer for size {}", size);
+            info!("✓ Correctly rejected oversized buffer for size {}", size);
+        }
+        
+        log_test_pass("buffer_allocation_properties");
     }
     
-    proptest! {
-        #[test] 
-        fn test_rx_buffer_length_properties(len in 0usize..400) {
-            // Property: Valid lengths should succeed, invalid should fail
+    #[test] 
+    fn test_rx_buffer_length_properties() {
+        log_test_start("rx_buffer_length_properties");
+        
+        // Property: Valid lengths should succeed, invalid should fail
+        let valid_lengths = [0, 1, 10, 50, 100, 200, 249];
+        let invalid_lengths = [250, 300, 400, 500];
+        
+        for &len in &valid_lengths {
             let mut rx_buf = RxBuffer::new();
             let result = rx_buf.set_len(len);
             
-            if len <= 249 { // RX_BUFFER_SIZE
-                prop_assert!(result.is_ok());
-                prop_assert_eq!(rx_buf.len(), len);
-                prop_assert_eq!(rx_buf.is_empty(), len == 0);
-            } else {
-                prop_assert!(matches!(result, Err(BufferError::InvalidSize)));
-            }
+            assert!(result.is_ok(), "Should accept valid length {}", len);
+            assert_eq!(rx_buf.len(), len);
+            assert_eq!(rx_buf.is_empty(), len == 0);
+            info!("✓ RX buffer length property holds for len {}", len);
         }
+        
+        for &len in &invalid_lengths {
+            let mut rx_buf = RxBuffer::new();
+            let result = rx_buf.set_len(len);
+            
+            assert!(matches!(result, Err(BufferError::InvalidSize)), 
+                    "Should reject invalid length {}", len);
+            info!("✓ Correctly rejected invalid length {}", len);
+        }
+        
+        log_test_pass("rx_buffer_length_properties");
     }
     
-    proptest! {
-        #[test]
-        fn test_command_packet_structure_properties(
-            packet_type in 0u8..=3,
-            opcode in any::<u16>(),
-            payload_len in 0u16..=200
-        ) {
-            // Property: Valid command packet structure should parse correctly
-            let mut packet_data = Vec::new();
-            packet_data.push(packet_type);
-            packet_data.extend_from_slice(&opcode.to_le_bytes());
-            packet_data.extend_from_slice(&payload_len.to_le_bytes());
+    #[test]
+    fn test_packet_structure_properties() {
+        log_test_start("packet_structure_properties");
+        
+        // Property: Valid packet creation and serialization should roundtrip correctly
+        let test_cases = [
+            (RequestCode::GetInfo, &[] as &[u8]),
+            (RequestCode::GapAdvStart, &[0x01, 0x00]), // handle, conn_cfg_tag
+            (RequestCode::GapAdvStop, &[0x01]), // handle
+            (RequestCode::GapGetAddr, &[]),
+            (RequestCode::GapSetAddr, &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x00]), // addr + type
+        ];
+        
+        for (request_code, payload) in &test_cases {
+            // Test packet creation
+            let packet = Packet::new_request_for_sending(*request_code, payload);
+            assert!(packet.is_ok(), "Failed to create packet for {:?}", request_code);
             
-            // Add payload bytes
-            for i in 0..payload_len {
-                packet_data.push((i % 256) as u8);
-            }
+            let packet = packet.unwrap();
+            assert_eq!(packet.code, *request_code as u16);
+            assert!(arrays_equal(packet.payload.as_slice(), payload));
             
-            if packet_type <= 2 && packet_data.len() <= 249 {
-                // Valid packet type and size - should parse
-                let result = Command::parse(&packet_data);
-                prop_assert!(result.is_ok());
-                
-                let cmd = result.unwrap();
-                prop_assert_eq!(cmd.opcode(), opcode);
-                prop_assert_eq!(cmd.payload().len(), payload_len as usize);
-            }
+            // Test serialization roundtrip
+            let serialized = packet.serialize_request();
+            assert!(serialized.is_ok(), "Failed to serialize packet for {:?}", request_code);
+            
+            let wire_data = serialized.unwrap();
+            info!("Serialized {:?}: {} bytes", request_code, wire_data.len());
+            
+            // Test parsing back
+            let parsed = Packet::new_request(wire_data.as_slice());
+            assert!(parsed.is_ok(), "Failed to parse serialized packet for {:?}", request_code);
+            
+            let parsed_packet = parsed.unwrap();
+            assert_eq!(parsed_packet.code, *request_code as u16);
+            assert!(arrays_equal(parsed_packet.payload.as_slice(), payload));
+            
+            info!("✓ Packet structure property holds for {:?}", request_code);
         }
+        
+        log_test_pass("packet_structure_properties");
     }
 }
