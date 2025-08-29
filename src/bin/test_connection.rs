@@ -10,7 +10,8 @@ mod common {
 }
 use defmt::{info, unwrap};
 use embassy_executor::Spawner;
-use embassy_nrf::{config::Config, interrupt};
+use embassy_nrf::config::Config;
+use embassy_nrf::interrupt;
 use embassy_time::{Duration, Timer};
 use nrf_softdevice::ble::advertisement_builder::{Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload};
 use nrf_softdevice::ble::peripheral::advertise_connectable;

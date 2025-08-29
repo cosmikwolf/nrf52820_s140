@@ -11,7 +11,6 @@ mod tests {
     use defmt::{assert, assert_eq};
 
     use super::*;
-    
 
     #[test]
     fn test_get_info_command() {
@@ -81,4 +80,3 @@ mod tests {
         assert_eq!(uuid_code, 0x0010);
     }
 }
-

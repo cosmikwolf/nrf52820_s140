@@ -1,13 +1,13 @@
 //! BLE Modem Protocol Definitions
-//! 
+//!
 //! This module defines the communication protocol between the host and the BLE modem.
 //! Protocol format:
 //! - Request: [Payload Data] [Request Code (2 bytes, big-endian)]
 //! - Response: [Response Code (2 bytes)] [Payload Data]
 
+use crc::{Crc, CRC_16_IBM_SDLC};
 use defmt::Format;
 use heapless::Vec;
-use crc::{Crc, CRC_16_IBM_SDLC};
 
 /// Maximum payload size (BLE_EVT_LEN_MAX + 2 bytes)
 pub const MAX_PAYLOAD_SIZE: usize = 247 + 2;
@@ -58,8 +58,8 @@ pub enum RequestCode {
     GapConnParamUpdate = 0x0027,
     GapDataLengthUpdate = 0x0028,
     GapPhyUpdate = 0x0029,
-    GapConnect = 0x002A,           // Central mode only
-    GapConnectCancel = 0x002B,     // Central mode only
+    GapConnect = 0x002A,       // Central mode only
+    GapConnectCancel = 0x002B, // Central mode only
     GapDisconnect = 0x002C,
 
     // GAP Operations - Power & RSSI
@@ -76,7 +76,7 @@ pub enum RequestCode {
     GattsCharacteristicAdd = 0x0081,
     GattsMtuReply = 0x0082,
     GattsHvx = 0x0083,
-    GattsSysAttrGet = 0x0084,     // Not implemented in original
+    GattsSysAttrGet = 0x0084, // Not implemented in original
     GattsSysAttrSet = 0x0085,
 
     // GATT Client Operations (Central mode only)
@@ -177,7 +177,8 @@ impl Packet {
     /// Create a new request packet from received data
     /// Format: [Length:2][Payload:N][RequestCode:2][CRC16:2]
     pub fn new_request(data: &[u8]) -> Result<Self, ProtocolError> {
-        if data.len() < 6 {  // Minimum: length(2) + code(2) + crc(2)
+        if data.len() < 6 {
+            // Minimum: length(2) + code(2) + crc(2)
             return Err(ProtocolError::InvalidLength);
         }
 
@@ -190,7 +191,7 @@ impl Packet {
         // Extract CRC from last 2 bytes
         let crc_offset = data.len() - 2;
         let received_crc = u16::from_be_bytes([data[crc_offset], data[crc_offset + 1]]);
-        
+
         // Validate CRC over entire message except CRC field
         let message_data = &data[..crc_offset];
         if !validate_crc16(message_data, received_crc) {
@@ -200,10 +201,11 @@ impl Packet {
         // Extract request code (2 bytes before CRC)
         let code_offset = crc_offset - 2;
         let code = u16::from_be_bytes([data[code_offset], data[code_offset + 1]]);
-        
+
         // Extract payload (everything between length and code)
         let mut packet_payload = Vec::new();
-        packet_payload.extend_from_slice(&data[2..code_offset])
+        packet_payload
+            .extend_from_slice(&data[2..code_offset])
             .map_err(|_| ProtocolError::BufferFull)?;
 
         Ok(Self {
@@ -215,7 +217,8 @@ impl Packet {
     /// Create a new response packet (code comes first, then payload)
     pub fn new_response(code: ResponseCode, payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut packet_payload = Vec::new();
-        packet_payload.extend_from_slice(payload)
+        packet_payload
+            .extend_from_slice(payload)
             .map_err(|_| ProtocolError::BufferFull)?;
 
         Ok(Self {
@@ -223,12 +226,13 @@ impl Packet {
             payload: packet_payload,
         })
     }
-    
+
     /// Create a new request packet for sending (used in tests)
     /// This creates the packet structure, call serialize() to get bytes for transmission
     pub fn new_request_for_sending(code: RequestCode, payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut packet_payload = Vec::new();
-        packet_payload.extend_from_slice(payload)
+        packet_payload
+            .extend_from_slice(payload)
             .map_err(|_| ProtocolError::BufferFull)?;
 
         Ok(Self {
@@ -236,36 +240,40 @@ impl Packet {
             payload: packet_payload,
         })
     }
-    
+
     /// Serialize request packet to bytes for transmission
     /// Format: [Length:2][Payload:N][RequestCode:2][CRC16:2]
     pub fn serialize_request(&self) -> Result<Vec<u8, MAX_PAYLOAD_SIZE>, ProtocolError> {
         let mut message = Vec::new();
-        
+
         // Calculate total length (length header + payload + code + crc)
         let total_length = 2 + self.payload.len() + 2 + 2;
         if total_length > MAX_PAYLOAD_SIZE {
             return Err(ProtocolError::BufferFull);
         }
-        
+
         // Add length header
         let length_bytes = (total_length as u16).to_be_bytes();
-        message.extend_from_slice(&length_bytes)
+        message
+            .extend_from_slice(&length_bytes)
             .map_err(|_| ProtocolError::BufferFull)?;
-            
+
         // Add payload
-        message.extend_from_slice(&self.payload)
+        message
+            .extend_from_slice(&self.payload)
             .map_err(|_| ProtocolError::BufferFull)?;
-        
+
         // Add request code
         let code_bytes = self.code.to_be_bytes();
-        message.extend_from_slice(&code_bytes)
+        message
+            .extend_from_slice(&code_bytes)
             .map_err(|_| ProtocolError::BufferFull)?;
-        
+
         // Calculate and add CRC over everything except CRC itself
         let crc = calculate_crc16(&message);
         let crc_bytes = crc.to_be_bytes();
-        message.extend_from_slice(&crc_bytes)
+        message
+            .extend_from_slice(&crc_bytes)
             .map_err(|_| ProtocolError::BufferFull)?;
 
         Ok(message)
@@ -275,31 +283,35 @@ impl Packet {
     /// Format: [Length:2][ResponseCode:2][Payload:N][CRC16:2]
     pub fn serialize(&self) -> Result<Vec<u8, MAX_PAYLOAD_SIZE>, ProtocolError> {
         let mut message = Vec::new();
-        
+
         // Calculate total length (length header + code + payload + crc)
         let total_length = 2 + 2 + self.payload.len() + 2;
         if total_length > MAX_PAYLOAD_SIZE {
             return Err(ProtocolError::BufferFull);
         }
-        
+
         // Add length header
         let length_bytes = (total_length as u16).to_be_bytes();
-        message.extend_from_slice(&length_bytes)
+        message
+            .extend_from_slice(&length_bytes)
             .map_err(|_| ProtocolError::BufferFull)?;
-        
+
         // Add response code
         let code_bytes = self.code.to_be_bytes();
-        message.extend_from_slice(&code_bytes)
+        message
+            .extend_from_slice(&code_bytes)
             .map_err(|_| ProtocolError::BufferFull)?;
-            
+
         // Add payload
-        message.extend_from_slice(&self.payload)
+        message
+            .extend_from_slice(&self.payload)
             .map_err(|_| ProtocolError::BufferFull)?;
-        
+
         // Calculate and add CRC over everything except CRC itself
         let crc = calculate_crc16(&message);
         let crc_bytes = crc.to_be_bytes();
-        message.extend_from_slice(&crc_bytes)
+        message
+            .extend_from_slice(&crc_bytes)
             .map_err(|_| ProtocolError::BufferFull)?;
 
         Ok(message)
@@ -323,8 +335,9 @@ impl Packet {
 
 /// Helper functions for big-endian serialization
 pub mod serialization {
-    use super::ProtocolError;
     use heapless::Vec;
+
+    use super::ProtocolError;
 
     pub fn write_u8<const N: usize>(buffer: &mut Vec<u8, N>, value: u8) -> Result<(), ProtocolError> {
         buffer.push(value).map_err(|_| ProtocolError::BufferFull)
@@ -360,10 +373,10 @@ pub mod serialization {
             return None;
         }
         Some(u32::from_be_bytes([
-            data[offset], 
-            data[offset + 1], 
-            data[offset + 2], 
-            data[offset + 3]
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
         ]))
     }
 
@@ -391,10 +404,7 @@ pub mod serialization {
             if self.offset + 2 > self.data.len() {
                 return Err(ProtocolError::InvalidData);
             }
-            let value = u16::from_be_bytes([
-                self.data[self.offset],
-                self.data[self.offset + 1]
-            ]);
+            let value = u16::from_be_bytes([self.data[self.offset], self.data[self.offset + 1]]);
             self.offset += 2;
             Ok(value)
         }
@@ -407,7 +417,7 @@ pub mod serialization {
                 self.data[self.offset],
                 self.data[self.offset + 1],
                 self.data[self.offset + 2],
-                self.data[self.offset + 3]
+                self.data[self.offset + 3],
             ]);
             self.offset += 4;
             Ok(value)

@@ -19,7 +19,6 @@ mod tests {
 
     #[test]
     fn test_basic_arithmetic() {
-
         assert_eq!(2 + 2, 4);
         assert_eq!(10 - 5, 5);
         assert_eq!(3 * 4, 12);

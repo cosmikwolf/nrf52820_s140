@@ -7,8 +7,10 @@
 //! - Dynamic GATT services and characteristics
 
 use defmt::Format;
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
-use heapless::{index_map::FnvIndexMap, Vec};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
+use heapless::index_map::FnvIndexMap;
+use heapless::Vec;
 use nrf_softdevice::ble::Uuid;
 
 /// Maximum number of registered UUID bases (matches original C implementation)
@@ -332,4 +334,3 @@ where
 pub fn init() {
     defmt::info!("Modem state initialized");
 }
-

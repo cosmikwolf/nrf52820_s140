@@ -31,15 +31,15 @@ pub struct ServiceInfo {
 pub struct CharacteristicInfo {
     pub service_handle: u16,
     pub value_handle: u16,
-    pub cccd_handle: u16,     // 0 if not present
-    pub sccd_handle: u16,     // 0 if not present
-    pub uuid_data: u16,       // Same format as ServiceInfo
-    pub properties: u8,       // Packed properties
-    pub uuid_type: u8,        // UUID type
-    pub max_len: u16,         // Maximum value length
-    pub current_len: u16,     // Current value length
-    pub permissions: u8,      // Read/write permissions
-    pub _reserved: u8,        // Alignment padding
+    pub cccd_handle: u16, // 0 if not present
+    pub sccd_handle: u16, // 0 if not present
+    pub uuid_data: u16,   // Same format as ServiceInfo
+    pub properties: u8,   // Packed properties
+    pub uuid_type: u8,    // UUID type
+    pub max_len: u16,     // Maximum value length
+    pub current_len: u16, // Current value length
+    pub permissions: u8,  // Read/write permissions
+    pub _reserved: u8,    // Alignment padding
 }
 
 /// Service type enumeration
@@ -89,15 +89,15 @@ pub struct GattRegistry {
     // Service storage: 8 * 8 = 64 bytes
     services: [ServiceInfo; MAX_SERVICES],
     service_count: u8,
-    
+
     // Characteristic storage: 32 * 16 = 512 bytes
-    characteristics: [CharacteristicInfo; MAX_CHARACTERISTICS], 
+    characteristics: [CharacteristicInfo; MAX_CHARACTERISTICS],
     characteristic_count: u8,
-    
+
     // UUID base storage: 4 * 16 = 64 bytes
     uuid_bases: [[u8; 16]; MAX_UUID_BASES],
     uuid_base_count: u8,
-    
+
     // Handle tracking
     next_service_id: u16,
     next_characteristic_id: u16,
@@ -115,7 +115,7 @@ impl GattRegistry {
                 _reserved: 0,
             }; MAX_SERVICES],
             service_count: 0,
-            
+
             characteristics: [CharacteristicInfo {
                 service_handle: 0,
                 value_handle: 0,
@@ -130,28 +130,28 @@ impl GattRegistry {
                 _reserved: 0,
             }; MAX_CHARACTERISTICS],
             characteristic_count: 0,
-            
+
             uuid_bases: [[0; 16]; MAX_UUID_BASES],
             uuid_base_count: 0,
-            
+
             next_service_id: 1,
             next_characteristic_id: 1,
         }
     }
-    
+
     /// Register a UUID base and return its handle
     pub fn register_uuid_base(&mut self, uuid_base: [u8; 16]) -> Result<u8, RegistryError> {
         if self.uuid_base_count >= MAX_UUID_BASES as u8 {
             return Err(RegistryError::UuidBasesFull);
         }
-        
+
         let handle = self.uuid_base_count;
         self.uuid_bases[handle as usize] = uuid_base;
         self.uuid_base_count += 1;
-        
+
         Ok(handle)
     }
-    
+
     /// Get UUID base by handle
     pub fn get_uuid_base(&self, handle: u8) -> Option<&[u8; 16]> {
         if handle < self.uuid_base_count {
@@ -160,24 +160,19 @@ impl GattRegistry {
             None
         }
     }
-    
+
     /// Add a service to the registry
-    pub fn add_service(
-        &mut self, 
-        handle: u16, 
-        uuid: BleUuid, 
-        service_type: ServiceType
-    ) -> Result<(), RegistryError> {
+    pub fn add_service(&mut self, handle: u16, uuid: BleUuid, service_type: ServiceType) -> Result<(), RegistryError> {
         if self.service_count >= MAX_SERVICES as u8 {
             return Err(RegistryError::ServicesFull);
         }
-        
+
         let (uuid_type, uuid_data) = match uuid {
             BleUuid::Uuid16(uuid) => (UuidType::Uuid16 as u8, uuid),
             BleUuid::Uuid128(_) => (UuidType::Uuid128 as u8, 0), // Store index separately
             BleUuid::VendorSpecific { base_id, offset } => (UuidType::VendorSpecific as u8, offset),
         };
-        
+
         let service_info = ServiceInfo {
             handle,
             uuid_type,
@@ -185,14 +180,14 @@ impl GattRegistry {
             service_type: service_type as u8,
             _reserved: 0,
         };
-        
+
         self.services[self.service_count as usize] = service_info;
         self.service_count += 1;
         self.next_service_id += 1;
-        
+
         Ok(())
     }
-    
+
     /// Add a characteristic to the registry
     pub fn add_characteristic(
         &mut self,
@@ -208,13 +203,13 @@ impl GattRegistry {
         if self.characteristic_count >= MAX_CHARACTERISTICS as u8 {
             return Err(RegistryError::CharacteristicsFull);
         }
-        
+
         let (uuid_type, uuid_data) = match uuid {
             BleUuid::Uuid16(uuid) => (UuidType::Uuid16 as u8, uuid),
             BleUuid::Uuid128(_) => (UuidType::Uuid128 as u8, 0), // Store index separately
             BleUuid::VendorSpecific { base_id: _, offset } => (UuidType::VendorSpecific as u8, offset),
         };
-        
+
         let char_info = CharacteristicInfo {
             service_handle,
             value_handle,
@@ -228,50 +223,50 @@ impl GattRegistry {
             permissions,
             _reserved: 0,
         };
-        
+
         self.characteristics[self.characteristic_count as usize] = char_info;
         self.characteristic_count += 1;
         self.next_characteristic_id += 1;
-        
+
         Ok(())
     }
-    
+
     /// Find service by handle
     pub fn find_service(&self, handle: u16) -> Option<&ServiceInfo> {
         self.services[..self.service_count as usize]
             .iter()
             .find(|s| s.handle == handle)
     }
-    
+
     /// Find characteristic by value handle
     pub fn find_characteristic_by_value_handle(&self, handle: u16) -> Option<&CharacteristicInfo> {
         self.characteristics[..self.characteristic_count as usize]
             .iter()
             .find(|c| c.value_handle == handle)
     }
-    
+
     /// Find characteristic by CCCD handle
     pub fn find_characteristic_by_cccd_handle(&self, handle: u16) -> Option<&CharacteristicInfo> {
         self.characteristics[..self.characteristic_count as usize]
             .iter()
             .find(|c| c.cccd_handle == handle && c.cccd_handle != 0)
     }
-    
+
     /// Get all services
     pub fn services(&self) -> &[ServiceInfo] {
         &self.services[..self.service_count as usize]
     }
-    
+
     /// Get all characteristics
     pub fn characteristics(&self) -> &[CharacteristicInfo] {
         &self.characteristics[..self.characteristic_count as usize]
     }
-    
+
     /// Get registry statistics
     pub fn stats(&self) -> (u8, u8, u8) {
         (self.service_count, self.characteristic_count, self.uuid_base_count)
     }
-    
+
     /// Clear all entries (for testing)
     pub fn clear(&mut self) {
         self.service_count = 0;
@@ -310,7 +305,7 @@ impl BleUuid {
             }
         }
     }
-    
+
     /// Parse UUID from payload data
     pub fn from_payload(uuid_type: u8, uuid_data: &[u8]) -> Result<Self, RegistryError> {
         match uuid_type {
@@ -321,7 +316,7 @@ impl BleUuid {
                 }
                 let uuid = u16::from_le_bytes([uuid_data[0], uuid_data[1]]);
                 Ok(BleUuid::Uuid16(uuid))
-            },
+            }
             1 => {
                 // 128-bit UUID
                 if uuid_data.len() < 16 {
@@ -330,7 +325,7 @@ impl BleUuid {
                 let mut uuid = [0u8; 16];
                 uuid.copy_from_slice(&uuid_data[..16]);
                 Ok(BleUuid::Uuid128(uuid))
-            },
+            }
             2 => {
                 // Vendor-specific UUID (base_id + offset)
                 if uuid_data.len() < 3 {
@@ -339,7 +334,7 @@ impl BleUuid {
                 let base_id = uuid_data[0];
                 let offset = u16::from_le_bytes([uuid_data[1], uuid_data[2]]);
                 Ok(BleUuid::VendorSpecific { base_id, offset })
-            },
+            }
             _ => Err(RegistryError::InvalidUuidType),
         }
     }
@@ -349,7 +344,7 @@ impl BleUuid {
 static mut GATT_REGISTRY: GattRegistry = GattRegistry::new();
 
 /// Access the global GATT registry
-/// 
+///
 /// # Safety
 /// This function provides mutable access to a static registry.
 /// It should only be called from a single thread (main async task).

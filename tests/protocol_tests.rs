@@ -87,4 +87,3 @@ mod tests {
         assert_ne!(crc1, crc2);
     }
 }
-

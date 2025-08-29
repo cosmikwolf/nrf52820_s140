@@ -1,5 +1,5 @@
 //! Command Processing Module
-//! 
+//!
 //! This module handles all BLE modem commands received from the host.
 //! Commands are routed to appropriate handlers and responses are sent back.
 
@@ -7,16 +7,15 @@ use defmt::{debug, error, Format};
 use heapless::Vec;
 use nrf_softdevice::Softdevice;
 
-use crate::core::{
-    memory::{TxPacket, BufferError},
-    protocol::{Packet, RequestCode, ResponseCode, ProtocolError, serialization::*, MAX_PAYLOAD_SIZE},
-    transport,
-};
+use crate::core::memory::{BufferError, TxPacket};
+use crate::core::protocol::serialization::*;
+use crate::core::protocol::{Packet, ProtocolError, RequestCode, ResponseCode, MAX_PAYLOAD_SIZE};
+use crate::core::transport;
 
-pub mod system;
-pub mod uuid;
 pub mod gap;
 pub mod gatts;
+pub mod system;
+pub mod uuid;
 
 /// Command processing errors
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Format)]
@@ -56,9 +55,7 @@ pub struct ResponseBuilder {
 impl ResponseBuilder {
     /// Create a new response builder
     pub fn new() -> Self {
-        Self {
-            buffer: Vec::new(),
-        }
+        Self { buffer: Vec::new() }
     }
 
     /// Add a u8 to the response
@@ -109,7 +106,7 @@ impl ResponseBuilder {
         builder.add_u16(error_code)?;
         builder.build(ResponseCode::Error)
     }
-    
+
     /// Build an error response from CommandError
     pub fn build_error(error: CommandError) -> Result<TxPacket, CommandError> {
         let error_code = match error {
@@ -133,8 +130,7 @@ impl Default for ResponseBuilder {
 
 /// Process a command packet and send response
 pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), CommandError> {
-    let request_code = packet.request_code()
-        .ok_or(CommandError::UnknownCommand)?;
+    let request_code = packet.request_code().ok_or(CommandError::UnknownCommand)?;
 
     debug!("Processing command: {:?}", request_code);
 
@@ -182,20 +178,20 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
         RequestCode::GattsSysAttrGet => {
             error!("GattsSysAttrGet not implemented in original firmware");
             ResponseBuilder::build_error(CommandError::NotImplemented)
-        },
+        }
         RequestCode::GattsSysAttrSet => gatts::handle_sys_attr_set(&packet.payload).await,
 
         // Central mode commands (not implemented in peripheral-only configuration)
-        RequestCode::GapConnect |
-        RequestCode::GapConnectCancel |
-        RequestCode::GapScanStart |
-        RequestCode::GapScanStop |
-        RequestCode::GattcMtuRequest |
-        RequestCode::GattcServiceDiscover |
-        RequestCode::GattcCharacteristicsDiscover |
-        RequestCode::GattcDescriptorsDiscover |
-        RequestCode::GattcRead |
-        RequestCode::GattcWrite => {
+        RequestCode::GapConnect
+        | RequestCode::GapConnectCancel
+        | RequestCode::GapScanStart
+        | RequestCode::GapScanStop
+        | RequestCode::GattcMtuRequest
+        | RequestCode::GattcServiceDiscover
+        | RequestCode::GattcCharacteristicsDiscover
+        | RequestCode::GattcDescriptorsDiscover
+        | RequestCode::GattcRead
+        | RequestCode::GattcWrite => {
             debug!("Central mode command not supported: {:?}", request_code);
             ResponseBuilder::build_error(CommandError::NotImplemented)
         }
@@ -204,7 +200,8 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
     match response {
         Ok(tx_packet) => {
             debug!("Command processed successfully, sending response");
-            transport::send_response(tx_packet).await
+            transport::send_response(tx_packet)
+                .await
                 .map_err(|_| CommandError::BufferError(BufferError::PoolExhausted))?;
         }
         Err(e) => {
@@ -233,8 +230,7 @@ impl CommandProcessor {
 
     /// Process a single command
     pub async fn process_command(&mut self, packet: Packet, sd: &Softdevice) -> Result<TxPacket, CommandError> {
-        let request_code = packet.request_code()
-            .ok_or(CommandError::UnknownCommand)?;
+        let request_code = packet.request_code().ok_or(CommandError::UnknownCommand)?;
 
         debug!("Processing command: {:?}", request_code);
 
@@ -282,20 +278,20 @@ impl CommandProcessor {
             RequestCode::GattsSysAttrGet => {
                 error!("GattsSysAttrGet not implemented in original firmware");
                 ResponseBuilder::build_error(CommandError::NotImplemented)
-            },
+            }
             RequestCode::GattsSysAttrSet => gatts::handle_sys_attr_set(&packet.payload).await,
 
             // Central mode commands (not implemented in peripheral-only configuration)
-            RequestCode::GapConnect |
-            RequestCode::GapConnectCancel |
-            RequestCode::GapScanStart |
-            RequestCode::GapScanStop |
-            RequestCode::GattcMtuRequest |
-            RequestCode::GattcServiceDiscover |
-            RequestCode::GattcCharacteristicsDiscover |
-            RequestCode::GattcDescriptorsDiscover |
-            RequestCode::GattcRead |
-            RequestCode::GattcWrite => {
+            RequestCode::GapConnect
+            | RequestCode::GapConnectCancel
+            | RequestCode::GapScanStart
+            | RequestCode::GapScanStop
+            | RequestCode::GattcMtuRequest
+            | RequestCode::GattcServiceDiscover
+            | RequestCode::GattcCharacteristicsDiscover
+            | RequestCode::GattcDescriptorsDiscover
+            | RequestCode::GattcRead
+            | RequestCode::GattcWrite => {
                 debug!("Central mode command not supported: {:?}", request_code);
                 ResponseBuilder::build_error(CommandError::NotImplemented)
             }
@@ -311,7 +307,7 @@ pub async fn command_processor_task(sd: &'static Softdevice) {
     loop {
         // Wait for command from SPI
         let packet = transport::receive_command().await;
-        
+
         // Process the command
         if let Err(e) = process_command(packet, sd).await {
             error!("Command processing error: {:?}", e);

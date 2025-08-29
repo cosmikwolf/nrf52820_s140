@@ -1,5 +1,5 @@
 //! Buffer Pool Management
-//! 
+//!
 //! This module provides static buffer pools for TX and RX operations.
 //! Uses atomic-pool for zero-allocation buffer management.
 
@@ -48,9 +48,8 @@ impl TxPacket {
             return Err(BufferError::BufferTooSmall);
         }
 
-        let mut buffer = Box::<TxPool>::new([0; BUFFER_SIZE])
-            .ok_or(BufferError::PoolExhausted)?;
-        
+        let mut buffer = Box::<TxPool>::new([0; BUFFER_SIZE]).ok_or(BufferError::PoolExhausted)?;
+
         buffer[..data.len()].copy_from_slice(data);
 
         Ok(Self {
@@ -140,8 +139,7 @@ impl TxQueue {
 
     /// Enqueue a packet for transmission
     pub fn enqueue(&mut self, packet: TxPacket) -> Result<(), BufferError> {
-        self.queue.push_back(packet)
-            .map_err(|_| BufferError::PoolExhausted)
+        self.queue.push_back(packet).map_err(|_| BufferError::PoolExhausted)
     }
 
     /// Dequeue the next packet for transmission
@@ -184,9 +182,9 @@ pub fn get_stats() -> PoolStats {
     // TODO: atomic_pool doesn't expose available() method directly
     // For now, we'll return placeholder values
     PoolStats {
-        tx_allocated: 0, // Would need to track this manually
+        tx_allocated: 0,            // Would need to track this manually
         tx_available: TX_POOL_SIZE, // Assuming all available for now
-        rx_active: true, // RX buffer is statically allocated
+        rx_active: true,            // RX buffer is statically allocated
     }
 }
 

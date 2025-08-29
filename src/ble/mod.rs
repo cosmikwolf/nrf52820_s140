@@ -1,5 +1,5 @@
 //! BLE Protocol Implementation
-//! 
+//!
 //! Contains all BLE-related functionality including GAP and GATT services.
 //! This module implements the Bluetooth Low Energy protocol stack components
 //! for the nRF52820 firmware.

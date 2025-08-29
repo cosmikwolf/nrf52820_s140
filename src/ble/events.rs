@@ -11,11 +11,9 @@ use defmt::debug;
 use heapless::Vec;
 use nrf_softdevice::ble::Connection;
 
-use crate::core::{
-    memory::TxPacket,
-    protocol::{ResponseCode, Packet, MAX_PAYLOAD_SIZE},
-    transport,
-};
+use crate::core::memory::TxPacket;
+use crate::core::protocol::{Packet, ResponseCode, MAX_PAYLOAD_SIZE};
+use crate::core::transport;
 
 /// Event serialization buffer
 type EventBuffer = Vec<u8, MAX_PAYLOAD_SIZE>;
@@ -58,61 +56,81 @@ impl BleModemEvent {
     /// Serialize event to wire format for transmission to host
     pub fn serialize(&self) -> Result<EventBuffer, ()> {
         let mut buffer = EventBuffer::new();
-        
+
         match self {
-            BleModemEvent::Connected { conn_handle, peer_addr, addr_type } => {
+            BleModemEvent::Connected {
+                conn_handle,
+                peer_addr,
+                addr_type,
+            } => {
                 // Event type: BLE_GAP_EVT_CONNECTED (0x11)
                 buffer.extend_from_slice(&[0x11, 0x00]).map_err(|_| ())?;
-                
+
                 // Connection handle
                 buffer.extend_from_slice(&conn_handle.to_le_bytes()).map_err(|_| ())?;
-                
+
                 // Peer address type and address
                 buffer.push(*addr_type).map_err(|_| ())?;
                 buffer.extend_from_slice(peer_addr).map_err(|_| ())?;
-            },
-            
+            }
+
             BleModemEvent::Disconnected { conn_handle, reason } => {
                 // Event type: BLE_GAP_EVT_DISCONNECTED (0x12)
                 buffer.extend_from_slice(&[0x12, 0x00]).map_err(|_| ())?;
                 buffer.extend_from_slice(&conn_handle.to_le_bytes()).map_err(|_| ())?;
                 buffer.push(*reason).map_err(|_| ())?;
-            },
-            
-            BleModemEvent::GattsWrite { conn_handle, char_handle, data } => {
+            }
+
+            BleModemEvent::GattsWrite {
+                conn_handle,
+                char_handle,
+                data,
+            } => {
                 // Event type: BLE_GATTS_EVT_WRITE (0x50)
                 buffer.extend_from_slice(&[0x50, 0x00]).map_err(|_| ())?;
                 buffer.extend_from_slice(&conn_handle.to_le_bytes()).map_err(|_| ())?;
                 buffer.extend_from_slice(&char_handle.to_le_bytes()).map_err(|_| ())?;
                 buffer.push(data.len() as u8).map_err(|_| ())?;
                 buffer.extend_from_slice(data).map_err(|_| ())?;
-            },
-            
-            BleModemEvent::GattsRead { conn_handle, char_handle } => {
+            }
+
+            BleModemEvent::GattsRead {
+                conn_handle,
+                char_handle,
+            } => {
                 // Event type: BLE_GATTS_EVT_READ (0x51)
                 buffer.extend_from_slice(&[0x51, 0x00]).map_err(|_| ())?;
                 buffer.extend_from_slice(&conn_handle.to_le_bytes()).map_err(|_| ())?;
                 buffer.extend_from_slice(&char_handle.to_le_bytes()).map_err(|_| ())?;
-            },
-            
-            BleModemEvent::MtuExchange { conn_handle, client_mtu, server_mtu } => {
+            }
+
+            BleModemEvent::MtuExchange {
+                conn_handle,
+                client_mtu,
+                server_mtu,
+            } => {
                 // Event type: BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST (0x52)
                 buffer.extend_from_slice(&[0x52, 0x00]).map_err(|_| ())?;
                 buffer.extend_from_slice(&conn_handle.to_le_bytes()).map_err(|_| ())?;
                 buffer.extend_from_slice(&client_mtu.to_le_bytes()).map_err(|_| ())?;
                 buffer.extend_from_slice(&server_mtu.to_le_bytes()).map_err(|_| ())?;
-            },
-            
-            BleModemEvent::CccdWrite { conn_handle, char_handle, notifications, indications } => {
+            }
+
+            BleModemEvent::CccdWrite {
+                conn_handle,
+                char_handle,
+                notifications,
+                indications,
+            } => {
                 // Event type: BLE_GATTS_EVT_CCCD_WRITE (0x53)
                 buffer.extend_from_slice(&[0x53, 0x00]).map_err(|_| ())?;
                 buffer.extend_from_slice(&conn_handle.to_le_bytes()).map_err(|_| ())?;
                 buffer.extend_from_slice(&char_handle.to_le_bytes()).map_err(|_| ())?;
                 let cccd_value = (*notifications as u8) | ((*indications as u8) << 1);
                 buffer.push(cccd_value).map_err(|_| ())?;
-            },
+            }
         }
-        
+
         Ok(buffer)
     }
 }
@@ -121,20 +139,19 @@ impl BleModemEvent {
 pub async fn forward_event_to_host(event: BleModemEvent) -> Result<(), ()> {
     // Serialize the event
     let event_data = event.serialize()?;
-    
+
     // Create response packet with BLE event code
-    let packet = Packet::new_response(ResponseCode::BleEvent, &event_data)
-        .map_err(|_| ())?;
-    
+    let packet = Packet::new_response(ResponseCode::BleEvent, &event_data).map_err(|_| ())?;
+
     // Serialize packet for transmission
     let serialized = packet.serialize().map_err(|_| ())?;
-    
+
     // Create TX packet
     let tx_packet = TxPacket::new(&serialized).map_err(|_| ())?;
-    
+
     // Send via SPI
     transport::send_response(tx_packet).await.map_err(|_| ())?;
-    
+
     debug!("Event forwarded to host successfully");
     Ok(())
 }
@@ -152,20 +169,16 @@ pub fn create_connected_event(conn: &Connection) -> BleModemEvent {
     }
 }
 
-/// Create a Disconnected event 
+/// Create a Disconnected event
 pub fn create_disconnected_event(conn_handle: u16, reason: u8) -> BleModemEvent {
     BleModemEvent::Disconnected { conn_handle, reason }
 }
 
 /// Create a GATT Write event
-pub fn create_gatts_write_event(
-    conn_handle: u16, 
-    char_handle: u16, 
-    data: &[u8]
-) -> Result<BleModemEvent, ()> {
+pub fn create_gatts_write_event(conn_handle: u16, char_handle: u16, data: &[u8]) -> Result<BleModemEvent, ()> {
     let mut event_data = Vec::new();
     event_data.extend_from_slice(data).map_err(|_| ())?;
-    
+
     Ok(BleModemEvent::GattsWrite {
         conn_handle,
         char_handle,

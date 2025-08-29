@@ -2,20 +2,21 @@
 #![no_main]
 
 use defmt::*;
-use defmt_rtt as _;
 use embassy_executor::Spawner;
-use embassy_nrf::{config::Config, interrupt};
+use embassy_nrf::config::Config;
+use embassy_nrf::interrupt;
 use embassy_time::{Duration, Timer};
 // Advertisement builder imports removed - now using advertising controller
 use nrf_softdevice::{Config as SdConfig, Softdevice};
-use panic_probe as _;
+use {defmt_rtt as _, panic_probe as _};
 
-mod core;
 mod ble;
 mod commands;
+mod core;
+
+use core::transport::{RxSpiConfig, TxSpiConfig};
 
 use ble::services::Server;
-use core::transport::{TxSpiConfig, RxSpiConfig};
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -74,42 +75,45 @@ async fn main(spawner: Spawner) {
         mosi_pin: peripherals.P0_04,
         miso_pin: peripherals.P0_02, // Dummy MISO for master mode
     };
-    
+
     let rx_spi_config = RxSpiConfig {
         ss_pin: peripherals.P0_07,
         sck_pin: peripherals.P0_06,
         mosi_pin: peripherals.P0_05,
         miso_pin: peripherals.P0_03, // Dummy MISO for slave mode
     };
-    
+
     // Initialize and spawn SPI tasks
-    unwrap!(core::transport::init_and_spawn(
-        &spawner,
-        tx_spi_config,
-        rx_spi_config,
-        peripherals.TWISPI0,
-        peripherals.TWISPI1,
-    ).await);
-    
+    unwrap!(
+        core::transport::init_and_spawn(
+            &spawner,
+            tx_spi_config,
+            rx_spi_config,
+            peripherals.TWISPI0,
+            peripherals.TWISPI1,
+        )
+        .await
+    );
+
     // Initialize other modules
     ble::gatt_state::init();
     core::memory::init();
     ble::connection::init();
     ble::bonding::init();
     ble::gap_state::init().await;
-    
+
     // Spawn advertising task (replaces the old BLE task)
     unwrap!(spawner.spawn(ble::advertising::advertising_task(sd, server)));
-    
+
     // Spawn command processor task to handle SPI commands
     unwrap!(spawner.spawn(commands::command_processor_task(sd)));
-    
+
     // Spawn service manager task for dynamic GATT operations
     unwrap!(spawner.spawn(ble::manager::service_manager_task(sd)));
-    
+
     // Spawn notification service task for BLE notifications/indications
     unwrap!(spawner.spawn(ble::notifications::notification_service_task()));
-    
+
     // Event forwarding is now handled directly in the advertising task
 
     info!("System initialized, entering main loop");
@@ -120,11 +124,6 @@ async fn main(spawner: Spawner) {
         info!("Heartbeat - system running");
     }
 }
-
-// BLE task is now replaced by advertising::advertising_task
-
-// connection_task removed - now using gatt_server::run directly
-
 
 #[embassy_executor::task]
 async fn softdevice_task(sd: &'static Softdevice) -> ! {
