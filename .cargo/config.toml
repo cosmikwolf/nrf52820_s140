@@ -22,4 +22,16 @@ DEFMT_LOG = "info"
 
 
 [alias]
-test-all = "test --test hello_world_test --test protocol_tests --test spi_tests --test integration_tests --test command_tests"
+test-all = """
+test \
+--test bonding_tests \
+--test command_tests \
+--test connection_tests \
+--test end_to_end_tests \
+--test event_tests \
+--test gatt_tests \
+--test integration_tests \
+--test notification_tests \
+--test protocol_tests \
+--test spi_tests \
+"""

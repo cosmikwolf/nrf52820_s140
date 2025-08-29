@@ -79,9 +79,6 @@ debug = 2
 opt-level = 1
 
 # Test configuration for embedded targets
-[[test]]
-name = "hello_world_test"
-harness = false
 
 [[test]]
 name = "protocol_tests"
@@ -100,8 +97,29 @@ name = "command_tests"
 harness = false
 
 [[test]]
-name = "echo_integration_test"
+name = "connection_tests"
 harness = false
+
+[[test]]
+name = "gatt_tests"
+harness = false
+
+[[test]]
+name = "notification_tests"
+harness = false
+
+[[test]]
+name = "bonding_tests"
+harness = false
+
+[[test]]
+name = "event_tests"
+harness = false
+
+[[test]]
+name = "end_to_end_tests"
+harness = false
+
 
 [profile.test]
 debug = true
