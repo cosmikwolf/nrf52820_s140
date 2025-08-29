@@ -11,13 +11,17 @@ use nrf_softdevice::{Config as SdConfig, Softdevice};
 use panic_probe as _;
 
 mod advertising;
+mod bonding_service;
 mod buffer_pool;
 mod commands;
+mod connection_manager;
 mod dynamic_gatt;
 mod events;
 mod gap_state;
 mod gatt_registry;
+mod notification_service;
 mod protocol;
+mod service_manager;
 mod services;
 mod spi_comm;
 mod state;
@@ -102,6 +106,8 @@ async fn main(spawner: Spawner) {
     // Initialize other modules
     state::init();
     buffer_pool::init();
+    connection_manager::init();
+    bonding_service::init();
     gap_state::init().await;
     
     // Spawn advertising task (replaces the old BLE task)
@@ -109,6 +115,12 @@ async fn main(spawner: Spawner) {
     
     // Spawn command processor task to handle SPI commands
     unwrap!(spawner.spawn(commands::command_processor_task(sd)));
+    
+    // Spawn service manager task for dynamic GATT operations
+    unwrap!(spawner.spawn(service_manager::service_manager_task(sd)));
+    
+    // Spawn notification service task for BLE notifications/indications
+    unwrap!(spawner.spawn(notification_service::notification_service_task()));
     
     // Event forwarding is now handled directly in the advertising task
 

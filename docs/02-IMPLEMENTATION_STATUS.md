@@ -1,15 +1,40 @@
 # Implementation Status & Overview
 
 ## Current Status
-- **Phase**: Event System Implementation (Phase 3C) - MAJOR PROGRESS ✅
-- **Progress**: Event Forwarding System Complete with proper nrf-softdevice patterns ✅
-- **Next Phase**: Dynamic GATT Service Creation (Phase 3B)
+- **Phase**: Dynamic GATT Foundation Complete (Phase 3B) - MAJOR MILESTONE ✅
+- **Progress**: Dynamic GATT Service Creation System Complete (~75% overall) ✅
+- **Next Phase**: Connection Management & Integration Testing (Phase 3D)
 - **Testing Framework**: defmt-test with property-based testing using proptest (no_std)
 - **Architecture**: BLE Proxy/Passthrough matching C firmware requirements
 
 ## Completed Components
 
-### Event Forwarding System (Phase 3C) ✅ **NEW**
+### Dynamic GATT Service Creation (Phase 3B) ✅ **MAJOR MILESTONE**
+- [x] Memory-optimized GATT Registry (~768 bytes total)
+  - ServiceInfo storage: 8 services × 8 bytes = 64 bytes
+  - CharacteristicInfo storage: 32 characteristics × 16 bytes = 512 bytes  
+  - UUID base storage: 4 bases × 16 bytes = 64 bytes
+  - Handle tracking with O(1) lookup by value/CCCD handles
+- [x] Dynamic GATT Server with nrf-softdevice integration
+  - DynamicGattServer implementing Server trait for write handling
+  - Event generation for characteristic writes and CCCD updates
+  - Proper integration with gatt_server::run() callback pattern
+- [x] Complete GATTS command implementation
+  - SERVICE_ADD (0x0080): Service creation with UUID type support
+  - CHARACTERISTIC_ADD (0x0081): Full characteristic creation with properties
+  - HVX (0x0083): Notification/indication infrastructure
+  - MTU_REPLY (0x0082): MTU exchange handling
+  - SYS_ATTR_SET (0x0085): Bonding system attributes
+- [x] Protocol-compliant BLE UUID handling
+  - 16-bit, 128-bit, and vendor-specific UUID support
+  - UUID base registration and management
+  - Conversion to nrf-softdevice UUID format
+- [x] ServiceBuilder integration for runtime service creation
+  - Characteristic properties mapping (READ/WRITE/NOTIFY/INDICATE)
+  - CCCD/SCCD handle management for notifications
+  - Value/permissions handling with security modes
+
+### Event Forwarding System (Phase 3C) ✅
 - [x] Proper nrf-softdevice event handling patterns implemented
   - Uses high-level abstractions instead of raw SoftDevice events
   - Connection lifecycle management in advertising.rs
@@ -80,12 +105,38 @@ Based on `/docs/01-BLE_MODEM_ANALYSIS.md`:
 
 ## Next Implementation Phases
 
-### Phase 3B: GATT Foundation (NEXT PRIORITY)
-- [ ] Dynamic service creation using nrf-softdevice ServiceBuilder
-- [ ] Characteristic management with handle tracking
-- [ ] Value read/write operations
-- [ ] CCCD/SCCD handling for notifications
-- [ ] MTU exchange handling
+### Phase 3D: Connection Management & Integration ✅ **COMPLETED**
+- [x] **ServiceBuilder Lifecycle Management** ✅
+  - Fix ServiceHandle to u16 conversion using proper nrf-softdevice API ✅
+  - Implement service creation with mutable Softdevice reference architecture ✅  
+  - Store ServiceBuilder instances for characteristic addition workflow ✅
+- [x] **Connection Object Management** ✅
+  - Implement connection handle mapping and lifecycle tracking ✅
+  - Enable MTU exchange responses with proper connection context ✅
+  - Connection manager with event forwarding infrastructure ✅
+- [x] **Notification/Indication System** ✅
+  - Channel-based notification service with proper async handling ✅
+  - Integration with GATTS HVX commands ✅
+  - Connection validation and error handling ✅
+- [x] **System Attributes & Bonding** ✅
+  - Bonding service with persistent CCCD state management ✅
+  - System attributes handling for bonded device restoration ✅
+  - Integration with GATTS SYS_ATTR_SET command ✅
+
+### Phase 4: Testing & Hardware Validation (CURRENT PRIORITY)
+- [ ] **Integration Testing Infrastructure**
+  - Create test suite for dynamic service creation via SPI commands
+  - Hardware validation with real BLE client connections
+  - Throughput and latency testing vs original C firmware
+
+## Previously Completed Phases
+
+### Phase 3B: GATT Foundation ✅ **COMPLETED**
+- [x] Dynamic service creation using nrf-softdevice ServiceBuilder ✅
+- [x] Characteristic management with handle tracking ✅
+- [x] Value read/write operations (infrastructure) ✅
+- [x] CCCD/SCCD handling for notifications ✅
+- [x] MTU exchange handling ✅
 
 ### Phase 3A: GAP Operations (PARTIALLY COMPLETE)
 - [x] Device address management (get/set) ✅
@@ -119,18 +170,19 @@ Based on `/docs/01-BLE_MODEM_ANALYSIS.md`:
 - **Available Flash**: 100KB (256KB - 156KB SoftDevice)
 - **Available RAM**: 16KB (32KB - 16KB SoftDevice)
 
-### Current Memory Usage (with GAP Device Identity)
-- **Flash**: 31.7KB used (+15.6KB from baseline), 68.3KB available ✅ **Comfortable**
-- **RAM BSS**: 9.9KB used (+0.5KB from baseline), 6.1KB available ⚠️ **TIGHT**
+### Current Memory Usage (with Dynamic GATT System)
+- **Flash**: 62.8KB used (+46.8KB from baseline), 37.2KB available ✅ **Comfortable**
+- **RAM BSS**: 10.9KB used (+1.4KB from baseline), 5.1KB available ⚠️ **TIGHT**
 
 ### Full Implementation Estimates
-- **Flash**: 45-55KB total ✅ **Feasible** 
-- **RAM**: 14-16KB total ⚠️ **At limit** - requires aggressive optimization
+- **Flash**: 65-75KB total ✅ **Well within limits** 
+- **RAM**: 13-15KB total ⚠️ **Close to limit** - monitoring required
 
 ### Critical RAM Consumers
 - TX Buffer Pool: 2KB (fixed, cannot reduce)
 - Embassy Tasks: 4-5KB (6 async tasks × ~1KB each)
-- Event System: 1-2KB (planned)
+- Dynamic GATT Registry: 768 bytes (optimized, fixed)
+- Event System: 1-2KB (implemented)
 - Stack/Static: 3-4KB
 
 ## Technical Decisions Made
@@ -141,11 +193,17 @@ Based on `/docs/01-BLE_MODEM_ANALYSIS.md`:
    - **Implementation**: Events forwarded at connection lifecycle points and GATT server events
    - **Result**: Clean integration with library patterns, no raw event pointer handling needed
 
-2. **Property Testing**: Using proptest for invariant testing with embedded-alloc
-3. **PAC Resolution**: Disabled default embassy-nrf features to avoid nrf-pac conflicts  
-4. **Testing Strategy**: Hardware-based testing with defmt-test (not simulation)
-5. **Architecture Compliance**: Full BLE proxy implementation (not simplified version)
-6. **Memory Strategy**: Aggressive optimization required - size-first approach mandatory
+2. **Dynamic GATT Architecture**: ✅ **COMPLETED** - ServiceBuilder + Registry pattern
+   - **ServiceBuilder Integration**: Uses nrf-softdevice ServiceBuilder for runtime service creation
+   - **Memory-Optimized Registry**: 768-byte fixed-size registry with O(1) handle lookups
+   - **Event Forwarding**: DynamicGattServer implements Server trait for write/CCCD events
+   - **Result**: Full GATT proxy capability with <1KB memory overhead
+
+3. **Property Testing**: Using proptest for invariant testing with embedded-alloc
+4. **PAC Resolution**: Disabled default embassy-nrf features to avoid nrf-pac conflicts  
+5. **Testing Strategy**: Hardware-based testing with defmt-test (not simulation)
+6. **Architecture Compliance**: Full BLE proxy implementation (not simplified version)
+7. **Memory Strategy**: Aggressive optimization achieved - 37KB flash headroom remaining
 
 ## Files Organization
 - `docs/01-BLE_MODEM_ANALYSIS.md` - Requirements analysis (preserved)

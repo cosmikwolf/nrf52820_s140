@@ -222,10 +222,10 @@ pub mod utils {
         // via ServiceBuilder::new()
         
         let service_handle = sb.build();
+        let handle_value = service_handle.handle();
         
-        info!("Created service with handle {:?}", service_handle);
-        // TODO: Convert ServiceHandle to u16 - needs investigation of nrf-softdevice API
-        Ok(0x0001)
+        info!("Created service with handle {}", handle_value);
+        Ok(handle_value)
     }
     
     /// Add a characteristic to an existing service builder

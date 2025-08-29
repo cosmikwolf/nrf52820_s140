@@ -17,6 +17,7 @@ use nrf_softdevice::{
 };
 
 use crate::{
+    connection_manager,
     gap_state::{self, AdvState, MAX_ADV_DATA_LEN},
     services::Server,
 };
@@ -245,11 +246,22 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                 Ok(conn) => {
                     debug!("BLE connection established!");
                     
+                    // Get connection handle and MTU
+                    let conn_handle = conn.handle().unwrap_or(0);
+                    let mtu = 23; // Default ATT MTU
+                    
+                    // Register connection with connection manager
+                    if let Err(e) = connection_manager::with_connection_manager(|mgr| {
+                        mgr.add_connection(conn_handle, mtu)
+                    }) {
+                        debug!("Failed to register connection: {:?}", e);
+                    }
+                    
                     // Update states
                     {
                         let mut gap_state = gap_state::gap_state().lock().await;
                         gap_state.set_connected(true);
-                        gap_state.conn_handle = 0; // Would be set by connection event in real implementation
+                        gap_state.conn_handle = conn_handle;
                     }
                     {
                         let mut controller = ADV_CONTROLLER.lock().await;
@@ -274,10 +286,18 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     }).await;
                     debug!("GATT server connection ended: {:?}", defmt::Debug2Format(&result));
                     
+                    // Unregister connection from connection manager
+                    let disconnection_reason = 0x13; // BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION
+                    if let Err(e) = connection_manager::with_connection_manager(|mgr| {
+                        mgr.remove_connection(conn_handle, disconnection_reason)
+                    }) {
+                        debug!("Failed to unregister connection: {:?}", e);
+                    }
+                    
                     // Forward disconnection event to host
                     let disconnected_event = crate::events::create_disconnected_event(
-                        conn.handle().unwrap_or(0),
-                        0x13 // BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION - would be actual reason code
+                        conn_handle,
+                        disconnection_reason
                     );
                     if let Err(_) = crate::events::forward_event_to_host(disconnected_event).await {
                         debug!("Failed to forward disconnection event to host");

@@ -306,6 +306,7 @@ pub enum StateError {
     CharacteristicsExhausted,
     NameTooLong,
     InvalidHandle,
+    ConnectionNotFound,
 }
 
 use embassy_sync::once_lock::OnceLock;
