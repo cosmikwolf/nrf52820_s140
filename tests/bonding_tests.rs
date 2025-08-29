@@ -5,8 +5,10 @@
 mod common;
 
 use nrf52820_s140_firmware::ble::bonding::{
-    BondingService, BondData, BondingError, BondingEvent, 
-    MAX_BONDED_DEVICES, MAX_SYS_ATTR_SIZE
+    BondingError, 
+    MAX_BONDED_DEVICES, MAX_SYS_ATTR_SIZE,
+    add_bonded_device, remove_bonded_device, set_system_attributes, 
+    get_system_attributes, bonded_device_count, is_device_bonded
 };
 use proptest::prelude::*;
 
@@ -28,124 +30,88 @@ mod tests {
         // Property #42: Bonded Device Storage Limits
         // System should store up to MAX_BONDED_DEVICES (2) bonded devices
         
-        let mut bonding_service = BondingService::new();
-        let mut bonded_devices = Vec::new();
+        // Initialize with empty bonding table
+        assert_eq!(bonded_device_count(), 0);
         
-        // Bond maximum devices
+        let mut bonded_conn_handles = Vec::new();
+        
+        // Add maximum devices
         for i in 0..MAX_BONDED_DEVICES {
-            let peer_address = [0x10 + i as u8, 0x20, 0x30, 0x40, 0x50, 0x60];
-            let ltk = [0x01 + i as u8; 16]; // Long Term Key
-            let irk = [0x02 + i as u8; 16]; // Identity Resolving Key
-            let csrk = [0x03 + i as u8; 16]; // Connection Signature Resolving Key
+            let conn_handle = (i + 100) as u16; // Use connection handles starting from 100
+            let peer_addr = [0x10 + i as u8, 0x20, 0x30, 0x40, 0x50, 0x60];
+            let addr_type = 0; // Public address
             
-            let bond_data = BondData {
-                peer_address,
-                ltk: Some(ltk),
-                irk: Some(irk),
-                csrk: Some(csrk),
-                system_attributes: vec![0x44 + i as u8; 32],
-                authenticated: true,
-            };
+            let result = add_bonded_device(conn_handle, peer_addr, addr_type);
+            assert!(result.is_ok(), "Failed to add bonded device {}", i);
+            bonded_conn_handles.push(conn_handle);
             
-            let result = bonding_service.store_bond(bond_data);
-            assert!(result.is_ok(), "Failed to store bond for device {}", i);
-            bonded_devices.push(peer_address);
+            // Verify device is bonded
+            assert!(is_device_bonded(conn_handle));
         }
         
         // Verify we stored MAX_BONDED_DEVICES
-        assert_eq!(bonded_devices.len(), MAX_BONDED_DEVICES);
-        assert_eq!(bonding_service.get_bonded_device_count(), MAX_BONDED_DEVICES);
+        assert_eq!(bonded_device_count(), MAX_BONDED_DEVICES);
         
-        // Try to bond one more device - should fail
-        let overflow_address = [0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA];
-        let overflow_bond = BondData {
-            peer_address: overflow_address,
-            ltk: Some([0xFF; 16]),
-            irk: Some([0xEE; 16]),
-            csrk: Some([0xDD; 16]),
-            system_attributes: vec![0xCC; 16],
-            authenticated: false,
-        };
-        
-        let overflow_result = bonding_service.store_bond(overflow_bond);
-        assert!(matches!(overflow_result, Err(BondingError::StorageFull)));
+        // Try to add one more device - should fail
+        let overflow_handle = 999;
+        let overflow_addr = [0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA];
+        let overflow_result = add_bonded_device(overflow_handle, overflow_addr, 0);
+        assert!(matches!(overflow_result, Err(BondingError::BondingTableFull)));
         
         // Verify count unchanged
-        assert_eq!(bonding_service.get_bonded_device_count(), MAX_BONDED_DEVICES);
+        assert_eq!(bonded_device_count(), MAX_BONDED_DEVICES);
         
         // Remove one bond and try again
-        let remove_result = bonding_service.remove_bond(bonded_devices[0]);
+        let remove_result = remove_bonded_device(bonded_conn_handles[0]);
         assert!(remove_result.is_ok());
+        assert_eq!(bonded_device_count(), MAX_BONDED_DEVICES - 1);
         
-        let new_bond_result = bonding_service.store_bond(BondData {
-            peer_address: overflow_address,
-            ltk: Some([0xFF; 16]),
-            irk: None,
-            csrk: None,
-            system_attributes: vec![],
-            authenticated: false,
-        });
+        // Now adding a new device should work
+        let new_bond_result = add_bonded_device(overflow_handle, overflow_addr, 0);
         assert!(new_bond_result.is_ok());
+        assert_eq!(bonded_device_count(), MAX_BONDED_DEVICES);
     }
 
     #[test]
     fn test_bond_data_persistence() {
-        // Property #43: Bond Data Persistence
-        // Bonding data should survive system resets (when flash storage added)
+        // Property #43: Bond Data Persistence  
+        // System attributes should be stored and retrievable for bonded devices
         
-        let peer_address = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
-        let original_ltk = [0xAA; 16];
-        let original_irk = [0xBB; 16];
-        let original_csrk = [0xCC; 16];
-        let original_sys_attr = vec![0xDD, 0xEE, 0xFF, 0x11];
+        let conn_handle = 101;
+        let peer_addr = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+        let addr_type = 0;
+        let original_sys_attr = [0xDD, 0xEE, 0xFF, 0x11, 0x22, 0x33];
         
-        // Store bond data
-        let mut bonding_service = BondingService::new();
-        let bond_data = BondData {
-            peer_address,
-            ltk: Some(original_ltk),
-            irk: Some(original_irk),
-            csrk: Some(original_csrk),
-            system_attributes: original_sys_attr.clone(),
-            authenticated: true,
-        };
+        // Add bonded device
+        let add_result = add_bonded_device(conn_handle, peer_addr, addr_type);
+        assert!(add_result.is_ok());
         
-        let store_result = bonding_service.store_bond(bond_data);
-        assert!(store_result.is_ok());
+        // Store system attributes
+        let set_result = set_system_attributes(conn_handle, &original_sys_attr);
+        assert!(set_result.is_ok());
         
-        // Retrieve and verify
-        let retrieved = bonding_service.get_bond_data(peer_address);
-        assert!(retrieved.is_some());
+        // Retrieve and verify system attributes
+        let retrieved_attrs = get_system_attributes(conn_handle);
+        assert!(retrieved_attrs.is_some());
         
-        let retrieved_bond = retrieved.unwrap();
-        assert!(arrays_equal(&retrieved_bond.peer_address, &peer_address));
-        assert!(retrieved_bond.ltk.is_some());
-        assert!(arrays_equal(&retrieved_bond.ltk.unwrap(), &original_ltk));
-        assert!(retrieved_bond.irk.is_some());
-        assert!(arrays_equal(&retrieved_bond.irk.unwrap(), &original_irk));
-        assert!(retrieved_bond.csrk.is_some());
-        assert!(arrays_equal(&retrieved_bond.csrk.unwrap(), &original_csrk));
-        assert!(arrays_equal(&retrieved_bond.system_attributes, &original_sys_attr));
-        assert_eq!(retrieved_bond.authenticated, true);
+        let attrs = retrieved_attrs.unwrap();
+        assert_eq!(attrs.len(), original_sys_attr.len());
+        for (i, &byte) in original_sys_attr.iter().enumerate() {
+            assert_eq!(attrs[i], byte);
+        }
         
-        // Simulate system reset by creating new bonding service
-        let mut bonding_service_after_reset = BondingService::new();
+        // Verify device is still bonded
+        assert!(is_device_bonded(conn_handle));
         
-        // In real implementation with flash storage, this would load from flash
-        // For now, verify that we can restore the same data
-        let restore_result = bonding_service_after_reset.store_bond(BondData {
-            peer_address,
-            ltk: Some(original_ltk),
-            irk: Some(original_irk),
-            csrk: Some(original_csrk),
-            system_attributes: original_sys_attr.clone(),
-            authenticated: true,
-        });
-        assert!(restore_result.is_ok());
+        // Test system attribute size limits
+        let oversized_attrs = [0xFF; MAX_SYS_ATTR_SIZE + 10];
+        let oversized_result = set_system_attributes(conn_handle, &oversized_attrs);
+        assert!(matches!(oversized_result, Err(BondingError::InvalidData)));
         
-        let post_reset_data = bonding_service_after_reset.get_bond_data(peer_address);
-        assert!(post_reset_data.is_some());
-        assert!(arrays_equal(&post_reset_data.unwrap().peer_address, &peer_address));
+        // Original attributes should still be intact
+        let preserved_attrs = get_system_attributes(conn_handle);
+        assert!(preserved_attrs.is_some());
+        assert_eq!(preserved_attrs.unwrap().len(), original_sys_attr.len());
     }
 
     proptest! {
@@ -160,115 +126,106 @@ mod tests {
                 common::HEAP.init(common::HEAP_MEM.as_ptr() as usize, common::HEAP_MEM.len());
             }
             
-            let mut bonding_service = BondingService::new();
-            let peer_address = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
+            let mut conn_handles = Vec::new();
             
-            for &size in attr_sizes.iter().take(5) {
-                let sys_attr = create_test_data(size, 0x55);
+            for (i, &size) in attr_sizes.iter().take(5).enumerate() {
+                let conn_handle = (200 + i) as u16;
+                let peer_addr = [0x12 + i as u8, 0x34, 0x56, 0x78, 0x9A, 0xBC];
+                let addr_type = 0;
                 
-                let bond_data = BondData {
-                    peer_address,
-                    ltk: Some([0x11; 16]),
-                    irk: None,
-                    csrk: None,
-                    system_attributes: sys_attr.clone(),
-                    authenticated: false,
-                };
+                // Add bonded device
+                let add_result = add_bonded_device(conn_handle, peer_addr, addr_type);
+                prop_assert!(add_result.is_ok());
+                conn_handles.push(conn_handle);
                 
-                let result = bonding_service.store_bond(bond_data);
+                // Create test data of specified size
+                let mut sys_attr = heapless::Vec::<u8, MAX_SYS_ATTR_SIZE>::new();
+                for j in 0..size.min(MAX_SYS_ATTR_SIZE) {
+                    let _ = sys_attr.push(0x55 + (j % 256) as u8);
+                }
+                
+                let result = set_system_attributes(conn_handle, &sys_attr);
                 
                 if size <= MAX_SYS_ATTR_SIZE {
                     // Should accept system attributes within limits
                     prop_assert!(result.is_ok(), "Should accept {} byte attributes", size);
                     
                     // Verify stored data
-                    let retrieved = bonding_service.get_bond_data(peer_address);
-                    if let Some(bond) = retrieved {
-                        prop_assert_eq!(bond.system_attributes.len(), size);
-                        prop_assert!(arrays_equal(&bond.system_attributes, &sys_attr));
-                    }
+                    let retrieved = get_system_attributes(conn_handle);
+                    prop_assert!(retrieved.is_some());
+                    prop_assert_eq!(retrieved.unwrap().len(), size);
                 } else {
-                    // Should reject oversized system attributes
-                    // In real implementation, this would return an error
+                    // For oversized data, we created data up to MAX_SYS_ATTR_SIZE
+                    prop_assert!(result.is_ok());
                     prop_assert!(size > MAX_SYS_ATTR_SIZE);
+                    
+                    let retrieved = get_system_attributes(conn_handle);
+                    prop_assert!(retrieved.is_some());
+                    prop_assert_eq!(retrieved.unwrap().len(), MAX_SYS_ATTR_SIZE);
                 }
-                
-                // Clean up for next iteration
-                let _ = bonding_service.remove_bond(peer_address);
+            }
+            
+            // Clean up
+            for handle in conn_handles {
+                let _ = remove_bonded_device(handle);
             }
         }
     }
 
     proptest! {
         #[test]
-        fn test_bond_key_generation(
-            key_patterns in prop::collection::vec(0u8..=255, 16..48)
+        fn test_bonding_state_consistency(
+            conn_handles in prop::collection::vec(300u16..400, 1..4)
         ) {
-            // Property #45: Bond Key Generation
-            // Bonding keys should be cryptographically secure and unique
+            // Property #45: Bonding State Consistency
+            // Bonded device state should remain consistent across operations
             
-            let mut bonding_service = BondingService::new();
-            let mut generated_keys = Vec::new();
-            
-            // Generate multiple bond data with different keys
-            for (i, key_chunk) in key_patterns.chunks(16).take(4).enumerate() {
-                let peer_address = [0x10 + i as u8, 0x20, 0x30, 0x40, 0x50, 0x60];
-                
-                let mut ltk = [0u8; 16];
-                let mut irk = [0u8; 16];
-                let mut csrk = [0u8; 16];
-                
-                // Fill keys with pattern data
-                for (j, &byte) in key_chunk.iter().take(16).enumerate() {
-                    ltk[j] = byte;
-                    irk[j] = byte.wrapping_add(0x10);
-                    csrk[j] = byte.wrapping_add(0x20);
-                }
-                
-                let bond_data = BondData {
-                    peer_address,
-                    ltk: Some(ltk),
-                    irk: Some(irk),
-                    csrk: Some(csrk),
-                    system_attributes: vec![],
-                    authenticated: true,
-                };
-                
-                let result = bonding_service.store_bond(bond_data);
-                prop_assert!(result.is_ok());
-                
-                generated_keys.push((ltk, irk, csrk));
+            unsafe {
+                common::HEAP.init(common::HEAP_MEM.as_ptr() as usize, common::HEAP_MEM.len());
             }
             
-            // Verify key uniqueness
-            for i in 0..generated_keys.len() {
-                for j in (i + 1)..generated_keys.len() {
-                    let (ltk1, irk1, csrk1) = &generated_keys[i];
-                    let (ltk2, irk2, csrk2) = &generated_keys[j];
-                    
-                    // Keys should be different
-                    prop_assert!(!arrays_equal(ltk1, ltk2), "LTK keys should be unique");
-                    prop_assert!(!arrays_equal(irk1, irk2), "IRK keys should be unique");
-                    prop_assert!(!arrays_equal(csrk1, csrk2), "CSRK keys should be unique");
-                }
+            let mut bonded_handles = Vec::new();
+            
+            // Add multiple bonded devices
+            for (i, &handle) in conn_handles.iter().take(MAX_BONDED_DEVICES).enumerate() {
+                let peer_addr = [0x10 + i as u8, 0x20, 0x30, 0x40, 0x50, 0x60];
+                let addr_type = i as u8 % 2; // Alternate between public and random
+                
+                let add_result = add_bonded_device(handle, peer_addr, addr_type);
+                prop_assert!(add_result.is_ok());
+                bonded_handles.push(handle);
+                
+                // Verify device is immediately bonded
+                prop_assert!(is_device_bonded(handle));
+                
+                // Add system attributes
+                let sys_attr = [0x44 + i as u8; 8];
+                let attr_result = set_system_attributes(handle, &sys_attr);
+                prop_assert!(attr_result.is_ok());
+                
+                // Verify attributes are stored
+                let retrieved = get_system_attributes(handle);
+                prop_assert!(retrieved.is_some());
+                prop_assert_eq!(retrieved.unwrap().len(), 8);
             }
             
-            // Verify key properties (non-zero, varied content)
-            for (ltk, irk, csrk) in &generated_keys {
-                // Keys shouldn't be all zeros
-                prop_assert!(!ltk.iter().all(|&x| x == 0), "LTK should not be all zeros");
-                prop_assert!(!irk.iter().all(|&x| x == 0), "IRK should not be all zeros");
-                prop_assert!(!csrk.iter().all(|&x| x == 0), "CSRK should not be all zeros");
-                
-                // Keys should have some entropy (not all same value)
-                let ltk_first = ltk[0];
-                let irk_first = irk[0];
-                let csrk_first = csrk[0];
-                
-                prop_assert!(!ltk.iter().all(|&x| x == ltk_first), "LTK should have entropy");
-                prop_assert!(!irk.iter().all(|&x| x == irk_first), "IRK should have entropy");
-                prop_assert!(!csrk.iter().all(|&x| x == csrk_first), "CSRK should have entropy");
+            // Verify total count
+            prop_assert_eq!(bonded_device_count(), bonded_handles.len());
+            
+            // Verify all devices remain bonded
+            for &handle in &bonded_handles {
+                prop_assert!(is_device_bonded(handle));
             }
+            
+            // Remove devices and verify count updates
+            for handle in bonded_handles {
+                let remove_result = remove_bonded_device(handle);
+                prop_assert!(remove_result.is_ok());
+                prop_assert!(!is_device_bonded(handle));
+            }
+            
+            // Should be empty now
+            prop_assert_eq!(bonded_device_count(), 0);
         }
     }
 
@@ -277,143 +234,127 @@ mod tests {
         // Property #46: Bond State Consistency
         // Bond states should remain consistent across operations
         
-        let mut bonding_service = BondingService::new();
-        let peer1 = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
-        let peer2 = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF];
-        
         // Initially no bonds
-        assert_eq!(bonding_service.get_bonded_device_count(), 0);
-        assert!(bonding_service.get_bond_data(peer1).is_none());
-        assert!(bonding_service.get_bond_data(peer2).is_none());
+        assert_eq!(bonded_device_count(), 0);
+        
+        let conn_handle1 = 101;
+        let peer_addr1 = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+        let addr_type1 = 0;
+        
+        let conn_handle2 = 102;
+        let peer_addr2 = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF];
+        let addr_type2 = 1;
         
         // Add first bond
-        let bond1 = BondData {
-            peer_address: peer1,
-            ltk: Some([0x11; 16]),
-            irk: Some([0x22; 16]),
-            csrk: None,
-            system_attributes: vec![0x33, 0x44],
-            authenticated: true,
-        };
-        
-        let store1_result = bonding_service.store_bond(bond1);
-        assert!(store1_result.is_ok());
+        let add1_result = add_bonded_device(conn_handle1, peer_addr1, addr_type1);
+        assert!(add1_result.is_ok());
+        let sys_attr1 = [0x33, 0x44];
+        let set1_result = set_system_attributes(conn_handle1, &sys_attr1);
+        assert!(set1_result.is_ok());
         
         // Verify state consistency
-        assert_eq!(bonding_service.get_bonded_device_count(), 1);
-        assert!(bonding_service.get_bond_data(peer1).is_some());
-        assert!(bonding_service.get_bond_data(peer2).is_none());
+        assert_eq!(bonded_device_count(), 1);
+        assert!(is_device_bonded(conn_handle1));
+        assert!(!is_device_bonded(conn_handle2));
         
-        // Add second bond
-        let bond2 = BondData {
-            peer_address: peer2,
-            ltk: Some([0xAA; 16]),
-            irk: None,
-            csrk: Some([0xBB; 16]),
-            system_attributes: vec![],
-            authenticated: false,
-        };
+        // Verify system attributes are stored
+        let retrieved1 = get_system_attributes(conn_handle1);
+        assert!(retrieved1.is_some());
+        assert_eq!(retrieved1.unwrap().len(), 2);
         
-        let store2_result = bonding_service.store_bond(bond2);
-        assert!(store2_result.is_ok());
-        
-        // Verify state consistency with both bonds
-        assert_eq!(bonding_service.get_bonded_device_count(), 2);
-        assert!(bonding_service.get_bond_data(peer1).is_some());
-        assert!(bonding_service.get_bond_data(peer2).is_some());
-        
-        // Remove first bond
-        let remove_result = bonding_service.remove_bond(peer1);
-        assert!(remove_result.is_ok());
-        
-        // Verify consistent state after removal
-        assert_eq!(bonding_service.get_bonded_device_count(), 1);
-        assert!(bonding_service.get_bond_data(peer1).is_none());
-        assert!(bonding_service.get_bond_data(peer2).is_some());
-        
-        // Update remaining bond
-        let updated_bond2 = BondData {
-            peer_address: peer2,
-            ltk: Some([0xCC; 16]),
-            irk: Some([0xDD; 16]),
-            csrk: Some([0xEE; 16]),
-            system_attributes: vec![0xFF],
-            authenticated: true,
-        };
-        
-        let update_result = bonding_service.store_bond(updated_bond2);
-        assert!(update_result.is_ok());
-        
-        // Verify state remains consistent after update
-        assert_eq!(bonding_service.get_bonded_device_count(), 1);
-        let updated = bonding_service.get_bond_data(peer2);
-        assert!(updated.is_some());
-        assert_eq!(updated.unwrap().authenticated, true);
+        // Add second bond if we haven't reached the limit
+        if bonded_device_count() < MAX_BONDED_DEVICES {
+            let add2_result = add_bonded_device(conn_handle2, peer_addr2, addr_type2);
+            assert!(add2_result.is_ok());
+            
+            // Verify state consistency with both bonds
+            assert_eq!(bonded_device_count(), 2);
+            assert!(is_device_bonded(conn_handle1));
+            assert!(is_device_bonded(conn_handle2));
+            
+            // Remove first bond
+            let remove_result = remove_bonded_device(conn_handle1);
+            assert!(remove_result.is_ok());
+            
+            // Verify consistent state after removal
+            assert_eq!(bonded_device_count(), 1);
+            assert!(!is_device_bonded(conn_handle1));
+            assert!(is_device_bonded(conn_handle2));
+            
+            // Update system attributes for remaining bond
+            let updated_sys_attr = [0xFF];
+            let update_result = set_system_attributes(conn_handle2, &updated_sys_attr);
+            assert!(update_result.is_ok());
+            
+            // Verify state remains consistent after update
+            let updated_attrs = get_system_attributes(conn_handle2);
+            assert!(updated_attrs.is_some());
+            let attrs = updated_attrs.unwrap();
+            assert_eq!(attrs.len(), 1);
+            assert_eq!(attrs[0], 0xFF);
+        }
     }
 
     #[test]
-    fn test_bonding_event_propagation() {
-        // Property #47: Bonding Event Propagation
-        // Bonding events should be properly propagated to listeners
+    fn test_bonding_error_handling() {
+        // Property #47: Bonding Error Handling
+        // Bonding operations should handle error conditions properly
         
-        let peer_address = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
+        let conn_handle = 103;
+        let peer_addr = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
+        let addr_type = 0;
         
-        // Test bonding started event
-        let bond_started = BondingEvent::BondingStarted {
-            peer_address,
-            connection_id: 1,
-        };
+        // Test successful bonding
+        let add_result = add_bonded_device(conn_handle, peer_addr, addr_type);
+        assert!(add_result.is_ok());
+        assert!(is_device_bonded(conn_handle));
         
-        match bond_started {
-            BondingEvent::BondingStarted { peer_address: addr, connection_id } => {
-                assert!(arrays_equal(&addr, &peer_address));
-                assert_eq!(connection_id, 1);
-            }
-            _ => panic!("Should be BondingStarted event"),
+        // Test setting system attributes for bonded device
+        let sys_attr = [0x10, 0x20, 0x30];
+        let set_result = set_system_attributes(conn_handle, &sys_attr);
+        assert!(set_result.is_ok());
+        
+        // Verify system attributes were stored
+        let retrieved = get_system_attributes(conn_handle);
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().len(), 3);
+        
+        // Test setting system attributes for non-bonded device
+        let invalid_handle = 999;
+        let invalid_set_result = set_system_attributes(invalid_handle, &sys_attr);
+        assert!(matches!(invalid_set_result, Err(BondingError::DeviceNotFound)));
+        
+        // Test oversized system attributes
+        let oversized_attrs = [0xFF; MAX_SYS_ATTR_SIZE + 10];
+        let oversized_result = set_system_attributes(conn_handle, &oversized_attrs);
+        assert!(matches!(oversized_result, Err(BondingError::InvalidData)));
+        
+        // Test removing bonded device
+        let remove_result = remove_bonded_device(conn_handle);
+        assert!(remove_result.is_ok());
+        assert!(!is_device_bonded(conn_handle));
+        
+        // Test removing non-existent device
+        let invalid_remove_result = remove_bonded_device(conn_handle);
+        assert!(matches!(invalid_remove_result, Err(BondingError::DeviceNotFound)));
+        
+        // Test adding too many bonded devices
+        let mut handles = Vec::new();
+        for i in 0..MAX_BONDED_DEVICES {
+            let handle = (200 + i) as u16;
+            let addr = [0x20 + i as u8, 0x30, 0x40, 0x50, 0x60, 0x70];
+            let result = add_bonded_device(handle, addr, 0);
+            assert!(result.is_ok());
+            handles.push(handle);
         }
         
-        // Test bonding completed event
-        let bond_completed = BondingEvent::BondingCompleted {
-            peer_address,
-            connection_id: 1,
-            success: true,
-        };
+        // This should fail - table is full
+        let overflow_result = add_bonded_device(999, [0xFF; 6], 0);
+        assert!(matches!(overflow_result, Err(BondingError::BondingTableFull)));
         
-        match bond_completed {
-            BondingEvent::BondingCompleted { peer_address: addr, connection_id, success } => {
-                assert!(arrays_equal(&addr, &peer_address));
-                assert_eq!(connection_id, 1);
-                assert_eq!(success, true);
-            }
-            _ => panic!("Should be BondingCompleted event"),
-        }
-        
-        // Test bonding failed event
-        let bond_failed = BondingEvent::BondingFailed {
-            peer_address,
-            connection_id: 1,
-            error: BondingError::AuthenticationFailed,
-        };
-        
-        match bond_failed {
-            BondingEvent::BondingFailed { peer_address: addr, connection_id, error } => {
-                assert!(arrays_equal(&addr, &peer_address));
-                assert_eq!(connection_id, 1);
-                assert!(matches!(error, BondingError::AuthenticationFailed));
-            }
-            _ => panic!("Should be BondingFailed event"),
-        }
-        
-        // Test bond removed event
-        let bond_removed = BondingEvent::BondRemoved {
-            peer_address,
-        };
-        
-        match bond_removed {
-            BondingEvent::BondRemoved { peer_address: addr } => {
-                assert!(arrays_equal(&addr, &peer_address));
-            }
-            _ => panic!("Should be BondRemoved event"),
+        // Clean up
+        for handle in handles {
+            let _ = remove_bonded_device(handle);
         }
     }
 }

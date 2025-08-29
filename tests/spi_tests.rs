@@ -13,12 +13,13 @@ mod tests {
     use alloc::vec::Vec;
 
     use common::*;
-    use defmt::{assert, assert_eq};
+    use defmt::{assert, assert_eq, info};
 
     use super::*;
 
     #[init]
     fn init() {
+        info!("begin spi tests");
         ensure_heap_initialized();
     }
 
@@ -288,10 +289,10 @@ mod tests {
         // Property #13: Channel Capacity Limits
         // Note: This test validates the conceptual limits. In a real implementation,
         // we would test actual TX_CHANNEL (8 slots) and RX_CHANNEL (1 slot) capacity.
-        
+
         // Test TX buffer pool exhaustion as proxy for TX channel capacity
         let mut packets = Vec::new();
-        
+
         // Fill TX pool to capacity (8 buffers)
         for i in 0..TX_POOL_SIZE {
             let data = [i as u8; 10];
@@ -299,14 +300,14 @@ mod tests {
             assert!(packet.is_ok());
             packets.push(packet.unwrap());
         }
-        
+
         // Next allocation should fail (channel full)
         let overflow_packet = TxPacket::new(&[0xFF; 10]);
         assert!(matches!(overflow_packet, Err(BufferError::PoolExhausted)));
-        
+
         // Release one buffer
         drop(packets.pop());
-        
+
         // Should now succeed
         let new_packet = TxPacket::new(&[0xEE; 10]);
         assert!(new_packet.is_ok());
@@ -317,43 +318,43 @@ mod tests {
         // Property #14: Non-blocking Operations
         // Note: This tests the buffer allocation non-blocking behavior
         // In real SPI implementation, this would test try_receive_command()
-        
+
         // Empty pool operations should be immediate (non-blocking)
         let start_time = 0; // In real test, would use timer
-        
+
         // Quick allocation should succeed immediately
         let packet = TxPacket::new(&[0x42]);
         assert!(packet.is_ok());
-        
+
         // Should return immediately whether success or failure
         let end_time = 0; // In real test, would verify timing
         assert_eq!(start_time, end_time); // Placeholder for timing verification
     }
 
-    #[test] 
+    #[test]
     fn test_channel_state_consistency() {
         // Property #15: Channel State Consistency
         // Test that buffer availability accurately reflects channel state
-        
+
         let mut packets = Vec::new();
-        
+
         // Initially should have space
         assert!(TX_POOL_SIZE > 0); // Proxy for tx_has_space()
-        
+
         // Fill to capacity
         for _ in 0..TX_POOL_SIZE {
             let packet = TxPacket::new(&[0x55]);
             assert!(packet.is_ok());
             packets.push(packet.unwrap());
         }
-        
+
         // Should now report no space
         let no_space_result = TxPacket::new(&[0x66]);
         assert!(matches!(no_space_result, Err(BufferError::PoolExhausted)));
-        
+
         // Free one buffer
         drop(packets.pop());
-        
+
         // Should report space available again
         let has_space_result = TxPacket::new(&[0x77]);
         assert!(has_space_result.is_ok());
@@ -363,26 +364,29 @@ mod tests {
     fn test_data_transfer_integrity() {
         // Property #17: Data Transfer Integrity
         // Test that data maintains integrity through buffer operations
-        
+
         let test_patterns = [
-            vec![0x00; 50],           // All zeros
-            vec![0xFF; 50],           // All ones  
+            vec![0x00; 50],                     // All zeros
+            vec![0xFF; 50],                     // All ones
             (0..50).map(|i| i as u8).collect(), // Sequential
-            vec![0xAA; 50],           // Pattern
-            vec![0x55; 50],           // Inverse pattern
+            vec![0xAA; 50],                     // Pattern
+            vec![0x55; 50],                     // Inverse pattern
         ];
-        
+
         for (i, pattern) in test_patterns.iter().enumerate() {
             // Create packet with test pattern
             let packet = TxPacket::new(pattern);
             assert!(packet.is_ok(), "Failed to create packet for pattern {}", i);
-            
+
             let packet = packet.unwrap();
-            
+
             // Verify data integrity - exact match
             assert_eq!(packet.len(), pattern.len());
-            assert!(arrays_equal(packet.as_slice(), pattern), 
-                   "Data integrity failed for pattern {}", i);
+            assert!(
+                arrays_equal(packet.as_slice(), pattern),
+                "Data integrity failed for pattern {}",
+                i
+            );
         }
     }
 }

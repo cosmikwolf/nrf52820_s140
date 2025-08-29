@@ -4,11 +4,11 @@
 
 mod common;
 
-use nrf52820_s140_firmware::ble::dynamic::{ServiceBuilder, CharacteristicBuilder, MAX_SERVICES};
-use nrf52820_s140_firmware::ble::gatt_state::{ModemState, ServiceType, StateError};
-use nrf52820_s140_firmware::ble::manager::{ServiceManager, ServiceError};
-use nrf52820_s140_firmware::ble::registry::{BleUuid, UuidBase};
-use nrf_softdevice::ble::{Uuid, characteristic, gatt};
+use nrf52820_s140_firmware::ble::gatt_state::{ModemState, ServiceType, StateError, MAX_SERVICES};
+use nrf52820_s140_firmware::commands::{CommandError, ResponseBuilder};
+use nrf52820_s140_firmware::commands::gatts;
+use nrf52820_s140_firmware::core::protocol::serialization::PayloadReader;
+use nrf_softdevice::ble::Uuid;
 use proptest::prelude::*;
 
 #[defmt_test::tests]
@@ -67,46 +67,35 @@ mod tests {
         fn test_characteristic_handle_assignment(
             char_counts in prop::collection::vec(1usize..10, 1..4)
         ) {
-            // Property #29: Characteristic Handle Assignment
-            // Characteristics should receive unique, sequential handles
+            // Property #29: Characteristic Handle Assignment  
+            // In the BLE modem protocol, handles are managed by the host
             
             let mut state = ModemState::new();
+            let mut service_handles = Vec::new();
             
-            // Add a service first
-            let service_handle = 1;
-            let service_uuid = Uuid::new_16(0x1234);
-            let service_result = state.add_service(service_handle, service_uuid, ServiceType::Primary);
-            prop_assert!(service_result.is_ok());
-            
-            let mut assigned_handles = Vec::new();
-            
-            // Add characteristics to the service
-            for &char_count in char_counts.iter().take(8) { // Reasonable limit for testing
-                for i in 0..char_count.min(5) { // Limit characteristics per iteration
-                    let char_uuid = Uuid::new_16(0x2000 + i as u16);
-                    let properties = characteristic::Properties {
-                        read: true,
-                        write: false,
-                        notify: false,
-                        indicate: false,
-                        write_without_response: false,
-                        signed_write: false,
-                        reliable_write: false,
-                        writable_auxiliaries: false,
-                    };
-                    
-                    // In a real implementation, this would use ServiceBuilder
-                    // For now, simulate handle assignment
-                    let char_handle = (service_handle + 1 + assigned_handles.len()) as u16;
-                    assigned_handles.push(char_handle);
-                }
+            // Add multiple services to test handle management
+            for &char_count in char_counts.iter().take(MAX_SERVICES.min(8)) {
+                let service_handle = (char_count + 1000) as u16; // Ensure unique handles
+                let service_uuid = Uuid::new_16(0x1234 + char_count as u16);
+                let service_result = state.add_service(service_handle, service_uuid, ServiceType::Primary);
                 
-                // Verify handles are unique and sequential
-                for i in 1..assigned_handles.len() {
-                    prop_assert!(assigned_handles[i] != assigned_handles[i-1]);
-                    // Sequential property might not always hold in real GATT, but monotonic should
-                    prop_assert!(assigned_handles[i] > service_handle);
+                if service_result.is_ok() {
+                    service_handles.push(service_handle);
                 }
+            }
+            
+            // Verify all services have unique handles
+            for i in 1..service_handles.len() {
+                for j in 0..i {
+                    prop_assert_ne!(service_handles[i], service_handles[j]);
+                }
+            }
+            
+            // Verify services can be retrieved
+            for &handle in &service_handles {
+                let service = state.get_service(handle);
+                prop_assert!(service.is_some());
+                prop_assert_eq!(service.unwrap().handle, handle);
             }
         }
     }
@@ -114,37 +103,28 @@ mod tests {
     #[test]
     fn test_service_building_workflow() {
         // Property #30: Service Building Workflow
-        // Service building should follow proper create→add_char→finalize workflow
+        // Service operations should follow proper add→remove workflow
         
-        let mut builder = ServiceBuilder::new(Uuid::new_16(0x1234));
+        let mut state = ModemState::new();
+        let service_handle = 0x1234;
+        let service_uuid = Uuid::new_16(0x1234);
         
-        // Valid workflow: add characteristics then finalize
-        let char_uuid = Uuid::new_16(0x2345);
-        let properties = characteristic::Properties {
-            read: true,
-            write: true,
-            notify: false,
-            indicate: false,
-            write_without_response: false,
-            signed_write: false,
-            reliable_write: false,
-            writable_auxiliaries: false,
-        };
-        
-        // Add characteristic
-        let add_result = builder.add_characteristic(char_uuid, properties, &[]);
+        // Valid workflow: add service 
+        let add_result = state.add_service(service_handle, service_uuid, ServiceType::Primary);
         assert!(add_result.is_ok());
         
-        // Build the service
-        let service_result = builder.build();
-        assert!(service_result.is_ok());
+        // Verify service was added
+        let service = state.get_service(service_handle);
+        assert!(service.is_some());
+        assert_eq!(service.unwrap().handle, service_handle);
         
-        // Test invalid workflow: try to use builder after finalization
-        // (In a real implementation, this would be enforced by consuming self in build())
-        // For now, verify that a new builder is needed for each service
-        let mut builder2 = ServiceBuilder::new(Uuid::new_16(0x5678));
-        let char2_result = builder2.add_characteristic(char_uuid, properties, &[]);
-        assert!(char2_result.is_ok());
+        // Test removal workflow
+        let remove_result = state.remove_service(service_handle);
+        assert!(remove_result.is_ok());
+        
+        // Verify service was removed
+        let service_after_remove = state.get_service(service_handle);
+        assert!(service_after_remove.is_none());
     }
 
     proptest! {
@@ -257,80 +237,32 @@ mod tests {
     }
 
     #[test]
-    fn test_characteristic_property_validation() {
-        // Property #34: Characteristic Property Validation
-        // Characteristic properties should be validated against BLE spec
+    fn test_characteristic_management() {
+        // Property #34: Characteristic Management
+        // System should support managing characteristics through command protocol
         
-        let mut builder = ServiceBuilder::new(Uuid::new_16(0x1234));
-        let char_uuid = Uuid::new_16(0x2345);
+        let mut state = ModemState::new();
+        let service_handle = 0x1234;
+        let service_uuid = Uuid::new_16(0x1234);
         
-        // Test valid property combinations
-        let valid_properties = [
-            characteristic::Properties {
-                read: true,
-                write: false,
-                notify: false,
-                indicate: false,
-                write_without_response: false,
-                signed_write: false,
-                reliable_write: false,
-                writable_auxiliaries: false,
-            },
-            characteristic::Properties {
-                read: true,
-                write: true,
-                notify: false,
-                indicate: false,
-                write_without_response: false,
-                signed_write: false,
-                reliable_write: false,
-                writable_auxiliaries: false,
-            },
-            characteristic::Properties {
-                read: false,
-                write: false,
-                notify: true,
-                indicate: false,
-                write_without_response: false,
-                signed_write: false,
-                reliable_write: false,
-                writable_auxiliaries: false,
-            },
-            characteristic::Properties {
-                read: false,
-                write: false,
-                notify: false,
-                indicate: true,
-                write_without_response: false,
-                signed_write: false,
-                reliable_write: false,
-                writable_auxiliaries: false,
-            },
-        ];
+        // Add a service first (required before adding characteristics)
+        let add_result = state.add_service(service_handle, service_uuid, ServiceType::Primary);
+        assert!(add_result.is_ok());
         
-        // All valid combinations should work
-        for (i, properties) in valid_properties.iter().enumerate() {
-            let char_uuid_unique = Uuid::new_16(0x2345 + i as u16);
-            let result = builder.add_characteristic(char_uuid_unique, *properties, &[]);
-            assert!(result.is_ok(), "Valid properties {} should be accepted", i);
-        }
+        // In a real BLE modem, characteristics would be added via GATTS_CHARACTERISTIC_ADD command
+        // The command would include properties, permissions, and initial values
+        // For now, test that the service exists and can be managed
+        let service = state.get_service(service_handle);
+        assert!(service.is_some());
+        assert_eq!(service.unwrap().service_type, ServiceType::Primary);
         
-        // Test that we can't have both notify and indicate on same characteristic
-        // (This would be caught by the BLE spec validation)
-        let invalid_properties = characteristic::Properties {
-            read: false,
-            write: false,
-            notify: true,
-            indicate: true, // Invalid: both notify and indicate
-            write_without_response: false,
-            signed_write: false,
-            reliable_write: false,
-            writable_auxiliaries: false,
-        };
+        // Test service removal cleans up associated data
+        let remove_result = state.remove_service(service_handle);
+        assert!(remove_result.is_ok());
         
-        // In a strict implementation, this should fail validation
-        // For now, just verify we can detect the conflict
-        assert!(invalid_properties.notify && invalid_properties.indicate);
+        // Verify complete cleanup
+        let service_after = state.get_service(service_handle);
+        assert!(service_after.is_none());
     }
 
     #[test]

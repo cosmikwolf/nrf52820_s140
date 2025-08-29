@@ -90,7 +90,7 @@ mod tests {
         
         for &invalid_code in &invalid_codes {
             // Create a raw packet with invalid request code
-            let payload = [];
+            let payload: [u8; 0] = [];
             
             // In a real implementation, this would test the command dispatcher
             // For now, we test that we can detect invalid codes by checking

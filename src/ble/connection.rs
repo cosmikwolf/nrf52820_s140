@@ -9,7 +9,7 @@ use embassy_sync::channel::{Channel, Receiver, Sender};
 use heapless::index_map::FnvIndexMap;
 
 /// Maximum number of simultaneous connections
-const MAX_CONNECTIONS: usize = 2;
+pub const MAX_CONNECTIONS: usize = 2;
 
 /// Connection information
 #[derive(Format, Clone)]
@@ -64,7 +64,7 @@ pub struct ConnectionManager {
 }
 
 impl ConnectionManager {
-    const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             connections: FnvIndexMap::new(),
             event_sender: None,
@@ -130,6 +130,16 @@ impl ConnectionManager {
         self.connections.get(&handle)
     }
 
+    /// Check if a connection exists
+    pub fn is_connected(&self, handle: u16) -> bool {
+        self.connections.contains_key(&handle)
+    }
+
+    /// Get the number of active connections
+    pub fn connection_count(&self) -> usize {
+        self.connections.len()
+    }
+
     /// Update connection MTU
     pub fn update_mtu(&mut self, handle: u16, mtu: u16) -> Result<(), ConnectionError> {
         match self.connections.get_mut(&handle) {
@@ -186,10 +196,6 @@ impl ConnectionManager {
         self.connections.keys().copied()
     }
 
-    /// Get connection count
-    pub fn connection_count(&self) -> usize {
-        self.connections.len()
-    }
 }
 
 /// Connection management errors

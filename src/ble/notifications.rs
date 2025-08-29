@@ -9,7 +9,7 @@ use embassy_sync::channel::Channel;
 use heapless::Vec;
 
 /// Maximum data length for notifications/indications
-const MAX_NOTIFICATION_DATA: usize = 64;
+pub const MAX_NOTIFICATION_DATA: usize = 64;
 
 /// Notification request
 #[derive(Debug, Clone)]

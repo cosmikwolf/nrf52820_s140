@@ -198,6 +198,31 @@ impl ModemState {
         self.services.iter().find(|s| s.handle == handle)
     }
 
+    /// Remove a service by handle
+    pub fn remove_service(&mut self, handle: u16) -> Result<(), StateError> {
+        // Find and remove the service
+        if let Some(index) = self.services.iter().position(|s| s.handle == handle) {
+            self.services.swap_remove(index);
+            // Also remove any characteristics that belong to this service
+            let mut char_handles_to_remove = heapless::Vec::<u16, MAX_CHARACTERISTICS>::new();
+            for (char_handle, service_handle) in &self.char_to_service_map {
+                if *service_handle == handle {
+                    let _ = char_handles_to_remove.push(*char_handle);
+                }
+            }
+            // Remove the characteristics
+            for char_handle in char_handles_to_remove {
+                self.char_to_service_map.remove(&char_handle);
+                if let Some(char_index) = self.characteristics.iter().position(|c| c.value_handle == char_handle) {
+                    self.characteristics.swap_remove(char_index);
+                }
+            }
+            Ok(())
+        } else {
+            Err(StateError::InvalidHandle)
+        }
+    }
+
     /// Add a new characteristic
     pub fn add_characteristic(&mut self, char_info: CharacteristicInfo) -> Result<(), StateError> {
         if self.characteristics.is_full() {
