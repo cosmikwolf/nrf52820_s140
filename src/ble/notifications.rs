@@ -141,7 +141,7 @@ pub async fn notification_service_task() {
 
     loop {
         let request = NOTIFICATION_CHANNEL.receive().await;
-        debug!("Processing notification request: {:?}", request);
+        // debug!("Processing notification request: {:?}", request);
 
         let result = process_notification_request(&request).await;
 

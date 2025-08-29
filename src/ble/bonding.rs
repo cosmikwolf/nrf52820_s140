@@ -43,13 +43,18 @@ struct BondingStorage {
 
 impl BondingStorage {
     fn new() -> Self {
-        Self {
+        let storage = Self {
             bonded_devices: FnvIndexMap::new(),
             next_bond_id: 1,
-        }
+        };
+        debug!("BONDING: Created new BondingStorage with {} devices", storage.bonded_devices.len());
+        storage
     }
 
     fn add_bonded_device(&mut self, conn_handle: u16, peer_addr: [u8; 6], addr_type: u8) -> Result<(), BondingError> {
+        debug!("BONDING: Attempting to add device {} (current count: {}/{})", 
+               conn_handle, self.bonded_devices.len(), MAX_BONDED_DEVICES);
+        
         let device = BondedDevice {
             conn_handle,
             peer_addr,
@@ -58,11 +63,13 @@ impl BondingStorage {
         };
 
         if self.bonded_devices.insert(conn_handle, device).is_err() {
-            error!("BONDING: Failed to add bonded device - table full");
+            error!("BONDING: Failed to add bonded device - table full (len: {}, capacity: {})", 
+                   self.bonded_devices.len(), self.bonded_devices.capacity());
             return Err(BondingError::BondingTableFull);
         }
 
-        debug!("BONDING: Added bonded device for connection {}", conn_handle);
+        debug!("BONDING: Added bonded device for connection {} (new count: {})", 
+               conn_handle, self.bonded_devices.len());
         Ok(())
     }
 
@@ -111,7 +118,17 @@ impl BondingStorage {
     }
 
     fn device_count(&self) -> usize {
-        self.bonded_devices.len()
+        let count = self.bonded_devices.len();
+        debug!("BONDING: device_count() = {} (map capacity: {})", count, self.bonded_devices.capacity());
+        if count > 0 {
+            debug!("BONDING: device count > 0, checking individual handles...");
+            for handle in 1..200u16 {
+                if self.bonded_devices.contains_key(&handle) {
+                    debug!("BONDING: Found device with handle {}", handle);
+                }
+            }
+        }
+        count
     }
 }
 
@@ -121,7 +138,12 @@ static mut BONDING_STORAGE: Option<BondingStorage> = None;
 /// Initialize the bonding service
 pub fn init() {
     unsafe {
+        if let Some(ref existing) = BONDING_STORAGE {
+            debug!("BONDING: Replacing existing storage with {} devices", existing.device_count());
+        }
         BONDING_STORAGE = Some(BondingStorage::new());
+        debug!("BONDING: After init, storage has {} devices", 
+               BONDING_STORAGE.as_ref().unwrap().device_count());
     }
     info!("BONDING: Bonding service initialized");
 }
@@ -179,5 +201,17 @@ pub fn is_device_bonded(conn_handle: u16) -> bool {
             .unwrap()
             .bonded_devices
             .contains_key(&conn_handle)
+    })
+}
+
+/// Get all bonded device handles (for testing/cleanup)
+pub fn get_all_bonded_handles() -> heapless::Vec<u16, MAX_BONDED_DEVICES> {
+    cortex_m::interrupt::free(|_cs| unsafe {
+        let storage = BONDING_STORAGE.as_ref().unwrap();
+        let mut handles = heapless::Vec::new();
+        for &handle in storage.bonded_devices.keys() {
+            let _ = handles.push(handle);
+        }
+        handles
     })
 }

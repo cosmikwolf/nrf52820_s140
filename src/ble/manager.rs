@@ -249,7 +249,7 @@ pub async fn service_manager_task(sd: &'static Softdevice) {
 
 /// Process a service creation request
 async fn process_service_request(sd: &'static Softdevice, request: ServiceCreateRequest) {
-    debug!("Processing service creation request: {:?}", request);
+    // debug!("Processing service creation request: {:?}", request);
 
     // Convert BleUuid to nrf-softdevice Uuid
     let uuid = crate::ble::registry::with_registry(|registry| request.uuid.to_softdevice_uuid(registry));
@@ -276,7 +276,7 @@ async fn process_service_request(sd: &'static Softdevice, request: ServiceCreate
 
 /// Process a characteristic creation request
 async fn process_characteristic_request(request: CharacteristicCreateRequest) {
-    debug!("Processing characteristic creation request: {:?}", request);
+    // debug!("Processing characteristic creation request: {:?}", request);
 
     // Convert BleUuid to nrf-softdevice Uuid
     let uuid = crate::ble::registry::with_registry(|registry| request.uuid.to_softdevice_uuid(registry));
