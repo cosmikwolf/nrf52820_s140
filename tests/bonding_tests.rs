@@ -28,7 +28,7 @@ mod tests {
     fn before_each() {
         // Initialize fresh bonding storage before each test
         bonding_init();
-        defmt::info!(
+        defmt::debug!(
             "SETUP: Fresh bonding storage initialized, count = {}",
             bonded_device_count()
         );
@@ -39,7 +39,7 @@ mod tests {
         // Clean up all bonded devices after each test for isolation
         let initial_count = bonded_device_count();
         if initial_count > 0 {
-            defmt::info!("CLEANUP: Starting cleanup with {} bonded devices", initial_count);
+            defmt::debug!("CLEANUP: Starting cleanup with {} bonded devices", initial_count);
         }
 
         // Limit iterations to prevent infinite loops
@@ -49,7 +49,7 @@ mod tests {
                 break;
             }
 
-            defmt::info!(
+            defmt::debug!(
                 "CLEANUP: Iteration {}, {} devices remaining",
                 cleanup_iteration,
                 remaining
@@ -66,7 +66,7 @@ mod tests {
                 }
             });
 
-            defmt::info!(
+            defmt::debug!(
                 "CLEANUP: Removed {} devices in iteration {}",
                 removed_this_iteration,
                 cleanup_iteration

@@ -3,7 +3,7 @@
 //! Manages BLE bonding and system attributes for persistent connections.
 //! Handles CCCD states and other client-specific data.
 
-use defmt::{debug, error, info, warn, Format};
+use defmt::{debug, info, warn, Format};
 use heapless::index_map::FnvIndexMap;
 
 /// Maximum number of bonded devices
@@ -63,8 +63,8 @@ impl BondingStorage {
         };
 
         if self.bonded_devices.insert(conn_handle, device).is_err() {
-            error!("BONDING: Failed to add bonded device - table full (len: {}, capacity: {})", 
-                   self.bonded_devices.len(), self.bonded_devices.capacity());
+            debug!("BONDING: Cannot add device {} - table full ({}/{})", 
+                   conn_handle, self.bonded_devices.len(), MAX_BONDED_DEVICES);
             return Err(BondingError::BondingTableFull);
         }
 
@@ -76,14 +76,18 @@ impl BondingStorage {
     fn set_system_attributes(&mut self, conn_handle: u16, sys_attr_data: &[u8]) -> Result<(), BondingError> {
         match self.bonded_devices.get_mut(&conn_handle) {
             Some(device) => {
-                device.sys_attr_data.clear();
-                if device.sys_attr_data.extend_from_slice(sys_attr_data).is_err() {
-                    error!(
-                        "BONDING: System attributes data too large for connection {}",
-                        conn_handle
+                // Check size first before clearing existing data
+                if sys_attr_data.len() > MAX_SYS_ATTR_SIZE {
+                    debug!(
+                        "BONDING: System attributes rejected for connection {} ({} > {} bytes)",
+                        conn_handle, sys_attr_data.len(), MAX_SYS_ATTR_SIZE
                     );
                     return Err(BondingError::InvalidData);
                 }
+                
+                // Size is valid, now update the data
+                device.sys_attr_data.clear();
+                let _ = device.sys_attr_data.extend_from_slice(sys_attr_data); // This should never fail now
                 debug!(
                     "BONDING: Updated system attributes for connection {} ({} bytes)",
                     conn_handle,
