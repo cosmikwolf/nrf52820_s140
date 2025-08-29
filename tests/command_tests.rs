@@ -4,7 +4,7 @@
 mod common;
 
 use nrf52820_s140_firmware::commands::{CommandError, ResponseBuilder};
-use nrf52820_s140_firmware::protocol::{Packet, RequestCode, ResponseCode};
+use nrf52820_s140_firmware::core::protocol::{Packet, RequestCode, ResponseCode};
 
 #[defmt_test::tests]
 mod tests {

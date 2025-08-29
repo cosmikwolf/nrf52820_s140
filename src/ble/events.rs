@@ -11,10 +11,10 @@ use defmt::debug;
 use heapless::Vec;
 use nrf_softdevice::ble::Connection;
 
-use crate::{
-    buffer_pool::TxPacket,
+use crate::core::{
+    memory::TxPacket,
     protocol::{ResponseCode, Packet, MAX_PAYLOAD_SIZE},
-    spi_comm,
+    transport,
 };
 
 /// Event serialization buffer
@@ -133,7 +133,7 @@ pub async fn forward_event_to_host(event: BleModemEvent) -> Result<(), ()> {
     let tx_packet = TxPacket::new(&serialized).map_err(|_| ())?;
     
     // Send via SPI
-    spi_comm::send_response(tx_packet).await.map_err(|_| ())?;
+    transport::send_response(tx_packet).await.map_err(|_| ())?;
     
     debug!("Event forwarded to host successfully");
     Ok(())

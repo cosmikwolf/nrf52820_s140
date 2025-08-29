@@ -4,8 +4,8 @@
 
 mod common;
 
-use nrf52820_s140_firmware::buffer_pool::TxPacket;
-use nrf52820_s140_firmware::protocol::{Packet, RequestCode, ResponseCode};
+use nrf52820_s140_firmware::core::memory::TxPacket;
+use nrf52820_s140_firmware::core::protocol::{Packet, RequestCode, ResponseCode};
 use nrf52820_s140_firmware::commands::system;
 
 #[defmt_test::tests]

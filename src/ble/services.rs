@@ -8,10 +8,10 @@ use nrf_softdevice::ble::gatt_server::{self, WriteOp};
 use nrf_softdevice::ble::Connection;
 use nrf_softdevice::Softdevice;
 
-use crate::{
+use crate::ble::{
     events,
+    dynamic::{DynamicGattServer, DynamicGattEvent},
 };
-use crate::dynamic_gatt::{DynamicGattServer, DynamicGattEvent};
 
 /// Main GATT Server implementation
 /// 

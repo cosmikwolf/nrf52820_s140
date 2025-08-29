@@ -16,8 +16,8 @@ use nrf_softdevice::{
     Softdevice,
 };
 
-use crate::{
-    connection_manager,
+use crate::ble::{
+    connection,
     gap_state::{self, AdvState, MAX_ADV_DATA_LEN},
     services::Server,
 };
@@ -251,7 +251,7 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     let mtu = 23; // Default ATT MTU
                     
                     // Register connection with connection manager
-                    if let Err(e) = connection_manager::with_connection_manager(|mgr| {
+                    if let Err(e) = connection::with_connection_manager(|mgr| {
                         mgr.add_connection(conn_handle, mtu)
                     }) {
                         debug!("Failed to register connection: {:?}", e);
@@ -272,8 +272,8 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     use nrf_softdevice::ble::gatt_server;
                     
                     // Forward connection event to host
-                    let connected_event = crate::events::create_connected_event(&conn);
-                    if let Err(_) = crate::events::forward_event_to_host(connected_event).await {
+                    let connected_event = crate::ble::events::create_connected_event(&conn);
+                    if let Err(_) = crate::ble::events::forward_event_to_host(connected_event).await {
                         debug!("Failed to forward connection event to host");
                     }
                     
@@ -288,18 +288,18 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     
                     // Unregister connection from connection manager
                     let disconnection_reason = 0x13; // BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION
-                    if let Err(e) = connection_manager::with_connection_manager(|mgr| {
+                    if let Err(e) = connection::with_connection_manager(|mgr| {
                         mgr.remove_connection(conn_handle, disconnection_reason)
                     }) {
                         debug!("Failed to unregister connection: {:?}", e);
                     }
                     
                     // Forward disconnection event to host
-                    let disconnected_event = crate::events::create_disconnected_event(
+                    let disconnected_event = crate::ble::events::create_disconnected_event(
                         conn_handle,
                         disconnection_reason
                     );
-                    if let Err(_) = crate::events::forward_event_to_host(disconnected_event).await {
+                    if let Err(_) = crate::ble::events::forward_event_to_host(disconnected_event).await {
                         debug!("Failed to forward disconnection event to host");
                     }
                     

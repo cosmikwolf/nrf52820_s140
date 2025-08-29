@@ -8,7 +8,7 @@
 use defmt::{info, warn};
 
 use crate::{
-    buffer_pool::TxPacket,
+    core::memory::TxPacket,
     commands::{CommandError, ResponseBuilder},
 };
 
@@ -24,7 +24,7 @@ pub async fn handle_get_info(_payload: &[u8]) -> Result<TxPacket, CommandError> 
     response.add_u32(FIRMWARE_VERSION_BCD)?;
     
     info!("System: Returning firmware version 0x{:08X}", FIRMWARE_VERSION_BCD);
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 /// Handle ECHO command (0x0003)
@@ -36,7 +36,7 @@ pub async fn handle_echo(payload: &[u8]) -> Result<TxPacket, CommandError> {
     response.add_slice(payload)?;
     
     info!("System: Echoing back {} bytes", payload.len());
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 /// Handle SHUTDOWN command (0x0002)

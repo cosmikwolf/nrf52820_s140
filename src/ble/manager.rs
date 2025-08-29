@@ -12,7 +12,7 @@ use nrf_softdevice::ble::gatt_server::characteristic::{Attribute, Metadata, Prop
 use nrf_softdevice::ble::Uuid;
 use nrf_softdevice::Softdevice;
 
-use crate::gatt_registry::{BleUuid, ServiceType};
+use crate::ble::registry::{BleUuid, ServiceType};
 
 /// Service creation request
 #[derive(Debug, Clone)]
@@ -253,7 +253,7 @@ async fn process_service_request(sd: &'static Softdevice, request: ServiceCreate
     debug!("Processing service creation request: {:?}", request);
     
     // Convert BleUuid to nrf-softdevice Uuid
-    let uuid = crate::gatt_registry::with_registry(|registry| {
+    let uuid = crate::ble::registry::with_registry(|registry| {
         request.uuid.to_softdevice_uuid(registry)
     });
     
@@ -282,7 +282,7 @@ async fn process_characteristic_request(request: CharacteristicCreateRequest) {
     debug!("Processing characteristic creation request: {:?}", request);
     
     // Convert BleUuid to nrf-softdevice Uuid
-    let uuid = crate::gatt_registry::with_registry(|registry| {
+    let uuid = crate::ble::registry::with_registry(|registry| {
         request.uuid.to_softdevice_uuid(registry)
     });
     
@@ -331,9 +331,9 @@ async fn create_service_with_builder(
     }
     
     // Store in registry
-    match crate::gatt_registry::with_registry(|registry| {
+    match crate::ble::registry::with_registry(|registry| {
         registry.add_service(handle, 
-            crate::gatt_registry::BleUuid::Uuid16(0x1801), // Placeholder Generic Attribute service
+            crate::ble::registry::BleUuid::Uuid16(0x1801), // Placeholder Generic Attribute service
             _service_type)
     }) {
         Ok(()) => {

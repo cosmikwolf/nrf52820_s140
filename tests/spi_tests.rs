@@ -4,8 +4,8 @@
 
 mod common;
 
-use nrf52820_s140_firmware::buffer_pool::{BufferError, RxBuffer, TxPacket, TX_POOL_SIZE};
-use nrf52820_s140_firmware::protocol::{Packet, RequestCode, ProtocolError};
+use nrf52820_s140_firmware::core::memory::{BufferError, RxBuffer, TxPacket, TX_POOL_SIZE};
+use nrf52820_s140_firmware::core::protocol::{Packet, RequestCode, ProtocolError};
 use proptest::prelude::*;
 
 #[defmt_test::tests]
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn test_error_propagation() {
         // Property #16: Error Propagation - test From trait implementations
-        use nrf52820_s140_firmware::spi_comm::SpiError;
+        use nrf52820_s140_firmware::core::transport::SpiError;
         
         let buffer_error = BufferError::PoolExhausted;
         let spi_error = SpiError::from(buffer_error);

@@ -3,7 +3,7 @@
 
 mod common;
 
-use nrf52820_s140_firmware::state::{ModemState, StateError, AdvertisingState, ServiceType};
+use nrf52820_s140_firmware::ble::gatt_state::{ModemState, StateError, AdvertisingState, ServiceType};
 use nrf_softdevice::ble::Uuid;
 use nrf52820_s140_firmware::commands::CommandError;
 

@@ -7,11 +7,10 @@ use defmt::debug;
 use nrf_softdevice::{Softdevice, ble::{Address, AddressType}};
 
 use crate::{
-    advertising,
-    buffer_pool::TxPacket,
+    ble::{advertising, gap_state},
+    core::memory::TxPacket,
     commands::{CommandError, ResponseBuilder},
-    gap_state,
-    protocol::serialization::{PayloadReader},
+    core::protocol::serialization::{PayloadReader},
 };
 
 // Placeholder implementations - will be completed in later phases
@@ -35,7 +34,7 @@ pub async fn handle_get_addr(_payload: &[u8]) -> Result<TxPacket, CommandError> 
     state.device_addr.copy_from_slice(&addr.bytes);
     state.addr_type = addr_type;
     
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_set_addr(payload: &[u8]) -> Result<TxPacket, CommandError> {
@@ -72,7 +71,7 @@ pub async fn handle_set_addr(payload: &[u8]) -> Result<TxPacket, CommandError> {
     
     let mut response = ResponseBuilder::new();
     response.add_u32(nrf_softdevice::raw::NRF_SUCCESS)?;
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_adv_start(payload: &[u8], _sd: &Softdevice) -> Result<TxPacket, CommandError> {
@@ -97,7 +96,7 @@ pub async fn handle_adv_start(payload: &[u8], _sd: &Softdevice) -> Result<TxPack
     
     let mut response = ResponseBuilder::new();
     response.add_u32(result)?;
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_adv_stop(payload: &[u8], _sd: &Softdevice) -> Result<TxPacket, CommandError> {
@@ -121,7 +120,7 @@ pub async fn handle_adv_stop(payload: &[u8], _sd: &Softdevice) -> Result<TxPacke
     
     let mut response = ResponseBuilder::new();
     response.add_u32(result)?;
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_adv_configure(payload: &[u8]) -> Result<TxPacket, CommandError> {
@@ -174,7 +173,7 @@ pub async fn handle_adv_configure(payload: &[u8]) -> Result<TxPacket, CommandErr
     let mut response = ResponseBuilder::new();
     response.add_u32(result)?;
     response.add_u8(handle)?;
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_get_name(payload: &[u8]) -> Result<TxPacket, CommandError> {
@@ -204,7 +203,7 @@ pub async fn handle_get_name(payload: &[u8]) -> Result<TxPacket, CommandError> {
         response.add_u16(state.device_name_len as u16)?;
     }
     
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_set_name(payload: &[u8]) -> Result<TxPacket, CommandError> {
@@ -242,7 +241,7 @@ pub async fn handle_set_name(payload: &[u8]) -> Result<TxPacket, CommandError> {
     
     let mut response = ResponseBuilder::new();
     response.add_u32(result)?;
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_conn_params_get(_payload: &[u8]) -> Result<TxPacket, CommandError> {
@@ -278,7 +277,7 @@ pub async fn handle_conn_params_get(_payload: &[u8]) -> Result<TxPacket, Command
         state.preferred_conn_params.conn_sup_timeout = conn_params.conn_sup_timeout;
     }
     
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_conn_params_set(payload: &[u8]) -> Result<TxPacket, CommandError> {
@@ -308,7 +307,7 @@ pub async fn handle_conn_params_set(payload: &[u8]) -> Result<TxPacket, CommandE
     // Update our internal state if successful
     if result == nrf_softdevice::raw::NRF_SUCCESS {
         let mut state = gap_state::gap_state().lock().await;
-        state.preferred_conn_params = crate::gap_state::ConnectionParams {
+        state.preferred_conn_params = crate::ble::gap_state::ConnectionParams {
             min_conn_interval,
             max_conn_interval,
             slave_latency,
@@ -318,7 +317,7 @@ pub async fn handle_conn_params_set(payload: &[u8]) -> Result<TxPacket, CommandE
     
     let mut response = ResponseBuilder::new();
     response.add_u32(result)?;
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 pub async fn handle_conn_param_update(_payload: &[u8]) -> Result<TxPacket, CommandError> {

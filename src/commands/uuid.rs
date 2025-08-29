@@ -6,9 +6,9 @@
 use defmt::{debug, info};
 
 use crate::{
-    buffer_pool::TxPacket,
+    core::memory::TxPacket,
     commands::{CommandError, ResponseBuilder},
-    state::with_state,
+    ble::gatt_state::with_state,
 };
 
 /// Handle REGISTER_UUID_GROUP command (0x0010)
@@ -44,7 +44,7 @@ pub async fn handle_register_uuid_group(payload: &[u8]) -> Result<TxPacket, Comm
     let mut response = ResponseBuilder::new();
     response.add_u8(handle)?;
     
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 /// Convert UUID base to nRF SoftDevice format

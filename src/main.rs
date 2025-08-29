@@ -10,24 +10,12 @@ use embassy_time::{Duration, Timer};
 use nrf_softdevice::{Config as SdConfig, Softdevice};
 use panic_probe as _;
 
-mod advertising;
-mod bonding_service;
-mod buffer_pool;
+mod core;
+mod ble;
 mod commands;
-mod connection_manager;
-mod dynamic_gatt;
-mod events;
-mod gap_state;
-mod gatt_registry;
-mod notification_service;
-mod protocol;
-mod service_manager;
-mod services;
-mod spi_comm;
-mod state;
 
-use services::Server;
-use spi_comm::{TxSpiConfig, RxSpiConfig};
+use ble::services::Server;
+use core::transport::{TxSpiConfig, RxSpiConfig};
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -95,7 +83,7 @@ async fn main(spawner: Spawner) {
     };
     
     // Initialize and spawn SPI tasks
-    unwrap!(spi_comm::init_and_spawn(
+    unwrap!(core::transport::init_and_spawn(
         &spawner,
         tx_spi_config,
         rx_spi_config,
@@ -104,23 +92,23 @@ async fn main(spawner: Spawner) {
     ).await);
     
     // Initialize other modules
-    state::init();
-    buffer_pool::init();
-    connection_manager::init();
-    bonding_service::init();
-    gap_state::init().await;
+    ble::gatt_state::init();
+    core::memory::init();
+    ble::connection::init();
+    ble::bonding::init();
+    ble::gap_state::init().await;
     
     // Spawn advertising task (replaces the old BLE task)
-    unwrap!(spawner.spawn(advertising::advertising_task(sd, server)));
+    unwrap!(spawner.spawn(ble::advertising::advertising_task(sd, server)));
     
     // Spawn command processor task to handle SPI commands
     unwrap!(spawner.spawn(commands::command_processor_task(sd)));
     
     // Spawn service manager task for dynamic GATT operations
-    unwrap!(spawner.spawn(service_manager::service_manager_task(sd)));
+    unwrap!(spawner.spawn(ble::manager::service_manager_task(sd)));
     
     // Spawn notification service task for BLE notifications/indications
-    unwrap!(spawner.spawn(notification_service::notification_service_task()));
+    unwrap!(spawner.spawn(ble::notifications::notification_service_task()));
     
     // Event forwarding is now handled directly in the advertising task
 

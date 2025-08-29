@@ -8,11 +8,11 @@ use nrf_softdevice::Softdevice;
 use nrf_softdevice::ble::gatt_server::builder::ServiceBuilder;
 
 use crate::{
-    buffer_pool::TxPacket,
+    core::memory::TxPacket,
     commands::{CommandError, ResponseBuilder},
-    protocol::serialization::PayloadReader,
+    core::protocol::serialization::PayloadReader,
 };
-use crate::gatt_registry::{with_registry, BleUuid, ServiceType};
+use crate::ble::registry::{with_registry, BleUuid, ServiceType};
 
 /// Handle GATTS_SERVICE_ADD command (0x0080)
 /// 
@@ -107,7 +107,7 @@ pub async fn handle_service_add(payload: &[u8], sd: &Softdevice) -> Result<TxPac
     };
     
     // Use the service manager for proper async service creation
-    let service_handle = match crate::service_manager::request_service_creation(ble_uuid, service_type).await {
+    let service_handle = match crate::ble::manager::request_service_creation(ble_uuid, service_type).await {
         Ok(handle) => handle,
         Err(e) => {
             error!("GATTS: Failed to create service via service manager: {:?}", e);
@@ -123,7 +123,7 @@ pub async fn handle_service_add(payload: &[u8], sd: &Softdevice) -> Result<TxPac
     let mut response = ResponseBuilder::new();
     response.add_u16(service_handle)?;
     
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 /// Handle GATTS_CHARACTERISTIC_ADD command (0x0081)
@@ -215,7 +215,7 @@ pub async fn handle_characteristic_add(payload: &[u8], _sd: &Softdevice) -> Resu
     debug!("GATTS: Parsed characteristic UUID: {:?}", ble_uuid);
     
     // Create the characteristic using the service manager
-    let handles = match crate::service_manager::request_characteristic_creation(
+    let handles = match crate::ble::manager::request_characteristic_creation(
         service_handle,
         ble_uuid,
         properties,
@@ -248,7 +248,7 @@ pub async fn handle_characteristic_add(payload: &[u8], _sd: &Softdevice) -> Resu
     }) {
         error!("GATTS: Failed to add characteristic to registry: {:?}", e);
         return ResponseBuilder::build_error(CommandError::StateError(
-            crate::state::StateError::CharacteristicsExhausted
+            crate::ble::gatt_state::StateError::CharacteristicsExhausted
         ));
     }
     
@@ -258,7 +258,7 @@ pub async fn handle_characteristic_add(payload: &[u8], _sd: &Softdevice) -> Resu
     response.add_u16(handles.cccd_handle)?; 
     response.add_u16(handles.sccd_handle)?;
     
-    response.build(crate::protocol::ResponseCode::Ack)
+    response.build(crate::core::protocol::ResponseCode::Ack)
 }
 
 /// Handle GATTS_HVX command (0x0083) - Handle Value Notification/Indication
@@ -295,11 +295,11 @@ pub async fn handle_hvx(payload: &[u8]) -> Result<TxPacket, CommandError> {
     let result = match hvx_type {
         0x01 => {
             info!("GATTS: Sending notification on handle {}", char_handle);
-            crate::notification_service::send_notification(conn_handle, char_handle, data).await
+            crate::ble::notifications::send_notification(conn_handle, char_handle, data).await
         },
         0x02 => {
             info!("GATTS: Sending indication on handle {}", char_handle);
-            crate::notification_service::send_indication(conn_handle, char_handle, data).await
+            crate::ble::notifications::send_indication(conn_handle, char_handle, data).await
         },
         _ => {
             debug!("GATTS: Invalid HVX type: {}", hvx_type);
@@ -340,7 +340,7 @@ pub async fn handle_mtu_reply(payload: &[u8]) -> Result<TxPacket, CommandError> 
     debug!("GATTS: MTU reply - conn: {}, MTU: {}", conn_handle, mtu);
     
     // Update the MTU in the connection manager
-    match crate::connection_manager::with_connection_manager(|mgr| {
+    match crate::ble::connection::with_connection_manager(|mgr| {
         mgr.update_mtu(conn_handle, mtu)
     }) {
         Ok(()) => {
@@ -349,7 +349,7 @@ pub async fn handle_mtu_reply(payload: &[u8]) -> Result<TxPacket, CommandError> 
         Err(e) => {
             error!("GATTS: Failed to update MTU for connection {}: {:?}", conn_handle, e);
             return ResponseBuilder::build_error(CommandError::StateError(
-                crate::state::StateError::ConnectionNotFound
+                crate::ble::gatt_state::StateError::ConnectionNotFound
             ));
         }
     }
@@ -387,7 +387,7 @@ pub async fn handle_sys_attr_set(payload: &[u8]) -> Result<TxPacket, CommandErro
     let sys_attr_data = reader.read_slice(attr_length)?;
     
     // Store system attributes in the bonding service
-    match crate::bonding_service::set_system_attributes(conn_handle, sys_attr_data) {
+    match crate::ble::bonding::set_system_attributes(conn_handle, sys_attr_data) {
         Ok(()) => {
             info!("GATTS: Set system attributes for connection {} ({} bytes)", 
                   conn_handle, attr_length);
@@ -396,7 +396,7 @@ pub async fn handle_sys_attr_set(payload: &[u8]) -> Result<TxPacket, CommandErro
             error!("GATTS: Failed to set system attributes for connection {}: {:?}", 
                    conn_handle, e);
             return ResponseBuilder::build_error(CommandError::StateError(
-                crate::state::StateError::ConnectionNotFound
+                crate::ble::gatt_state::StateError::ConnectionNotFound
             ));
         }
     }

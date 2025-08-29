@@ -16,10 +16,11 @@ pub use {embassy_nrf as _, embassy_sync as _, embassy_time as _};
 
 // Global allocator for proptest (required for alloc feature in no_std)
 pub extern crate alloc;
+#[allow(unused)]
 pub use alloc::vec;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 pub use embedded_alloc::LlffHeap as Heap;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 #[global_allocator]
 pub static HEAP: Heap = Heap::empty();
@@ -64,5 +65,3 @@ pub fn arrays_equal(a: &[u8], b: &[u8]) -> bool {
 
     true
 }
-
-

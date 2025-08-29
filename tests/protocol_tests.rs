@@ -3,7 +3,7 @@
 
 mod common;
 
-use nrf52820_s140_firmware::protocol::{calculate_crc16, validate_crc16};
+use nrf52820_s140_firmware::core::protocol::{calculate_crc16, validate_crc16};
 
 #[defmt_test::tests]
 mod tests {

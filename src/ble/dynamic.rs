@@ -9,9 +9,9 @@ use nrf_softdevice::ble::gatt_server::{self, WriteOp};
 use nrf_softdevice::ble::{Connection, Uuid};
 use nrf_softdevice::Softdevice;
 
-use crate::{
+use crate::ble::{
     events::{self, BleModemEvent},
-    gatt_registry::{with_registry, BleUuid, GattRegistry},
+    registry::{with_registry, BleUuid, GattRegistry},
 };
 
 /// Dynamic GATT server events
@@ -207,7 +207,7 @@ pub mod utils {
     use nrf_softdevice::ble::gatt_server::builder::ServiceBuilder;
     use nrf_softdevice::ble::gatt_server::characteristic::{Attribute, Metadata, Properties};
     use nrf_softdevice::ble::gatt_server::CharacteristicHandles;
-    use crate::gatt_registry::{ServiceType, char_properties};
+    use crate::ble::registry::{ServiceType, char_properties};
     
     /// Create a service using ServiceBuilder
     pub fn create_service(

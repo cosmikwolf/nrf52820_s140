@@ -19,8 +19,8 @@ use embassy_sync::{
 };
 use embassy_time::{Duration, Timer};
 
-use crate::{
-    buffer_pool::{TxPacket, BufferError},
+use crate::core::{
+    memory::{TxPacket, BufferError},
     protocol::{Packet, ProtocolError},
 };
 

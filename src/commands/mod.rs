@@ -7,10 +7,10 @@ use defmt::{debug, error, Format};
 use heapless::Vec;
 use nrf_softdevice::Softdevice;
 
-use crate::{
-    buffer_pool::{TxPacket, BufferError},
+use crate::core::{
+    memory::{TxPacket, BufferError},
     protocol::{Packet, RequestCode, ResponseCode, ProtocolError, serialization::*, MAX_PAYLOAD_SIZE},
-    spi_comm,
+    transport,
 };
 
 pub mod system;
@@ -25,7 +25,7 @@ pub enum CommandError {
     InvalidPayload,
     BufferError(BufferError),
     ProtocolError(ProtocolError),
-    StateError(crate::state::StateError),
+    StateError(crate::ble::gatt_state::StateError),
     SoftDeviceError,
     NotImplemented,
 }
@@ -42,8 +42,8 @@ impl From<ProtocolError> for CommandError {
     }
 }
 
-impl From<crate::state::StateError> for CommandError {
-    fn from(err: crate::state::StateError) -> Self {
+impl From<crate::ble::gatt_state::StateError> for CommandError {
+    fn from(err: crate::ble::gatt_state::StateError) -> Self {
         CommandError::StateError(err)
     }
 }
@@ -204,14 +204,14 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
     match response {
         Ok(tx_packet) => {
             debug!("Command processed successfully, sending response");
-            spi_comm::send_response(tx_packet).await
+            transport::send_response(tx_packet).await
                 .map_err(|_| CommandError::BufferError(BufferError::PoolExhausted))?;
         }
         Err(e) => {
             error!("Command processing failed: {:?}", e);
             // Try to send error response
             if let Ok(error_packet) = ResponseBuilder::build_error(CommandError::UnknownCommand) {
-                let _ = spi_comm::send_response(error_packet).await;
+                let _ = transport::send_response(error_packet).await;
             }
             return Err(e);
         }
@@ -310,7 +310,7 @@ pub async fn command_processor_task(sd: &'static Softdevice) {
 
     loop {
         // Wait for command from SPI
-        let packet = spi_comm::receive_command().await;
+        let packet = transport::receive_command().await;
         
         // Process the command
         if let Err(e) = process_command(packet, sd).await {
