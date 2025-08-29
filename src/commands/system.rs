@@ -9,6 +9,7 @@ use defmt::{info, warn};
 
 use crate::commands::{CommandError, ResponseBuilder};
 use crate::core::memory::TxPacket;
+use crate::ble::events::{register_event_callback, clear_event_callbacks, EventCallbackFn};
 
 /// Firmware version in BCD format (matches original C implementation)
 const FIRMWARE_VERSION_BCD: u32 = 0x00010000; // Version 1.0.0.0
@@ -81,4 +82,51 @@ pub async fn handle_reboot(_payload: &[u8]) -> Result<TxPacket, CommandError> {
     // cortex_m::peripheral::SCB::sys_reset();
 
     Ok(response)
+}
+
+/// Handle REGISTER_EVENT_CALLBACK command 
+/// Registers a callback for BLE events
+/// 
+/// Payload format:
+/// - 4 bytes: Function pointer (callback address)
+/// - 4 bytes: Context value
+pub async fn handle_register_event_callback(payload: &[u8]) -> Result<TxPacket, CommandError> {
+    info!("System: REGISTER_EVENT_CALLBACK requested");
+
+    if payload.len() != 8 {
+        warn!("System: Invalid payload length for event callback registration");
+        return ResponseBuilder::build_error(CommandError::InvalidPayload);
+    }
+
+    // Extract callback function pointer and context
+    let callback_ptr = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+    let context = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
+
+    // Safety: This is unsafe as we're casting a raw pointer to a function pointer
+    // In a real implementation, the host would pass verified function pointers
+    let callback: EventCallbackFn = unsafe { 
+        core::mem::transmute::<*const (), EventCallbackFn>(callback_ptr as *const ()) 
+    };
+
+    match register_event_callback(callback, context).await {
+        Ok(()) => {
+            info!("System: Event callback registered successfully");
+            ResponseBuilder::build_ack()
+        }
+        Err(()) => {
+            warn!("System: Failed to register event callback - registry full");
+            ResponseBuilder::build_error(CommandError::InvalidPayload)
+        }
+    }
+}
+
+/// Handle CLEAR_EVENT_CALLBACKS command
+/// Clears all registered event callbacks
+pub async fn handle_clear_event_callbacks(_payload: &[u8]) -> Result<TxPacket, CommandError> {
+    info!("System: CLEAR_EVENT_CALLBACKS requested");
+
+    clear_event_callbacks().await;
+
+    info!("System: All event callbacks cleared");
+    ResponseBuilder::build_ack()
 }

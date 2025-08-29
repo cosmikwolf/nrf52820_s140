@@ -140,6 +140,10 @@ pub async fn process_command(packet: Packet, sd: &Softdevice) -> Result<(), Comm
         RequestCode::Echo => system::handle_echo(&packet.payload).await,
         RequestCode::Shutdown => system::handle_shutdown(&packet.payload).await,
         RequestCode::Reboot => system::handle_reboot(&packet.payload).await,
+        
+        // Event Management Commands
+        RequestCode::RegisterEventCallback => system::handle_register_event_callback(&packet.payload).await,
+        RequestCode::ClearEventCallbacks => system::handle_clear_event_callbacks(&packet.payload).await,
 
         // UUID Management
         RequestCode::RegisterUuidGroup => uuid::handle_register_uuid_group(&packet.payload).await,
@@ -240,6 +244,10 @@ impl CommandProcessor {
             RequestCode::Echo => system::handle_echo(&packet.payload).await,
             RequestCode::Shutdown => system::handle_shutdown(&packet.payload).await,
             RequestCode::Reboot => system::handle_reboot(&packet.payload).await,
+            
+            // Event Management Commands
+            RequestCode::RegisterEventCallback => system::handle_register_event_callback(&packet.payload).await,
+            RequestCode::ClearEventCallbacks => system::handle_clear_event_callbacks(&packet.payload).await,
 
             // UUID Management
             RequestCode::RegisterUuidGroup => uuid::handle_register_uuid_group(&packet.payload).await,

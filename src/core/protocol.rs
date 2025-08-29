@@ -35,6 +35,10 @@ pub enum RequestCode {
     Echo = 0x0003,
     Shutdown = 0x0002,
     Reboot = 0x00F0,
+    
+    // Event Management Commands
+    RegisterEventCallback = 0x0004,
+    ClearEventCallbacks = 0x0005,
 
     // UUID Management
     RegisterUuidGroup = 0x0010,

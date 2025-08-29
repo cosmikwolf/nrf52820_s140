@@ -10,6 +10,8 @@
 use defmt::debug;
 use heapless::Vec;
 use nrf_softdevice::ble::Connection;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
 
 use crate::core::memory::TxPacket;
 use crate::core::protocol::{Packet, ResponseCode, MAX_PAYLOAD_SIZE};
@@ -17,6 +19,78 @@ use crate::core::transport;
 
 /// Event serialization buffer
 type EventBuffer = Vec<u8, MAX_PAYLOAD_SIZE>;
+
+/// Maximum number of registered event callbacks
+const MAX_EVENT_CALLBACKS: usize = 4;
+
+/// Event callback function type
+/// Parameters: (event_data: &[u8], context: u32)
+pub type EventCallbackFn = fn(&[u8], u32);
+
+/// Event callback registration entry
+#[derive(Clone, Copy)]
+pub struct CallbackEntry {
+    pub callback: EventCallbackFn,
+    pub context: u32,
+    pub active: bool,
+}
+
+/// Event callback registry
+pub struct CallbackRegistry {
+    callbacks: Vec<CallbackEntry, MAX_EVENT_CALLBACKS>,
+}
+
+impl CallbackRegistry {
+    pub const fn new() -> Self {
+        Self {
+            callbacks: Vec::new(),
+        }
+    }
+
+    /// Register a new event callback
+    pub fn register_callback(&mut self, callback: EventCallbackFn, context: u32) -> Result<(), ()> {
+        // Check if we have space for a new callback
+        if self.callbacks.len() >= MAX_EVENT_CALLBACKS {
+            // Try to find an inactive slot
+            for entry in self.callbacks.iter_mut() {
+                if !entry.active {
+                    entry.callback = callback;
+                    entry.context = context;
+                    entry.active = true;
+                    return Ok(());
+                }
+            }
+            return Err(()); // No space available
+        }
+
+        // Add new callback
+        self.callbacks.push(CallbackEntry {
+            callback,
+            context,
+            active: true,
+        }).map_err(|_| ())?;
+
+        Ok(())
+    }
+
+    /// Clear all event callbacks
+    pub fn clear_callbacks(&mut self) {
+        self.callbacks.clear();
+    }
+
+    /// Dispatch event to all registered callbacks
+    pub fn dispatch_event(&self, event_data: &[u8]) {
+        for entry in self.callbacks.iter() {
+            if entry.active {
+                (entry.callback)(event_data, entry.context);
+            }
+        }
+    }
+}
+
+/// Global callback registry
+static CALLBACK_REGISTRY: Mutex<CriticalSectionRawMutex, CallbackRegistry> = 
+    Mutex::new(CallbackRegistry::new());
 
 /// BLE event types we forward to the host
 #[derive(Debug)]
@@ -140,6 +214,9 @@ pub async fn forward_event_to_host(event: BleModemEvent) -> Result<(), ()> {
     // Serialize the event
     let event_data = event.serialize()?;
 
+    // Dispatch to registered callbacks first
+    CALLBACK_REGISTRY.lock().await.dispatch_event(&event_data);
+
     // Create response packet with BLE event code
     let packet = Packet::new_response(ResponseCode::BleEvent, &event_data).map_err(|_| ())?;
 
@@ -199,4 +276,27 @@ pub fn create_cccd_write_event(
         notifications,
         indications,
     }
+}
+
+/// Register an event callback for BLE events
+/// 
+/// This function allows the host application to register a callback function
+/// that will be called whenever BLE events occur.
+/// 
+/// # Parameters
+/// - callback: Function pointer to the callback function
+/// - context: User-defined context value passed to the callback
+/// 
+/// # Returns
+/// - Ok(()) on success
+/// - Err(()) if the callback registry is full
+pub async fn register_event_callback(callback: EventCallbackFn, context: u32) -> Result<(), ()> {
+    CALLBACK_REGISTRY.lock().await.register_callback(callback, context)
+}
+
+/// Clear all registered event callbacks
+/// 
+/// This function removes all previously registered event callbacks.
+pub async fn clear_event_callbacks() {
+    CALLBACK_REGISTRY.lock().await.clear_callbacks();
 }
