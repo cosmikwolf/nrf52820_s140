@@ -102,42 +102,38 @@ mod tests {
         }
     }
 
-    proptest! {
-        #[test]
-        fn test_connection_state_consistency(
-            connection_ids in prop::collection::vec(0u16..1000, 1..10)
-        ) {
-            // Property #24: Connection State Consistency
-            // Connection state should remain consistent across operations
-            
-            unsafe {
-                common::HEAP.init(common::HEAP_MEM.as_ptr() as usize, common::HEAP_MEM.len());
-            }
-            
+    #[test]
+    fn test_connection_state_consistency() {
+        // Property #24: Connection State Consistency  
+        // Connection state should remain consistent across operations
+        
+        proptest!(|(
+            connection_ids in prop::collection::vec(1u16..1000, 1..10)
+        )| {
             let mut manager = ConnectionManager::new();
             let mut active_connections = Vec::new();
             
             // Add connections up to the limit
             for &conn_id in connection_ids.iter().take(MAX_CONNECTIONS) {
                 let result = manager.add_connection(conn_id, 23);
-                prop_assert!(result.is_ok());
+                assert!(result.is_ok());
                 active_connections.push(conn_id);
                 
                 // Verify connection is tracked
-                prop_assert!(manager.is_connected(conn_id));
-                prop_assert_eq!(manager.connection_count(), active_connections.len());
+                assert!(manager.is_connected(conn_id));
+                assert_eq!(manager.connection_count(), active_connections.len());
             }
             
             // Remove all connections
             for &conn_id in &active_connections {
-                let result = manager.remove_connection(conn_id);
-                prop_assert!(result.is_ok());
-                prop_assert!(!manager.is_connected(conn_id));
+                let result = manager.remove_connection(conn_id, 0x16);
+                assert!(result.is_ok());
+                assert!(!manager.is_connected(conn_id));
             }
             
             // Should be empty now
-            prop_assert_eq!(manager.connection_count(), 0);
-        }
+            assert_eq!(manager.connection_count(), 0);
+        });
     }
 
     #[test]
@@ -174,38 +170,38 @@ mod tests {
         assert_eq!(manager.connection_count(), 2);
     }
 
-    proptest! {
-        #[test]
-        fn test_connection_handle_uniqueness(
-            handles in prop::collection::vec(0u16..100, 1..10)
-        ) {
-            // Property #26: Connection Handle Uniqueness
-            // Each active connection should have a unique handle
-            
+    #[test]
+    fn test_connection_handle_uniqueness() {
+        // Property #26: Connection Handle Uniqueness
+        // Each active connection should have a unique handle
+        
+        proptest!(|(
+            handles in prop::collection::vec(1u16..100, 1..10)
+        )| {
             let mut manager = ConnectionManager::new();
             let mut unique_handles = Vec::new();
             
             // Add connections with unique handles up to limit
             for &handle in handles.iter().take(MAX_CONNECTIONS) {
                 if !unique_handles.contains(&handle) {
-                    let result = manager.add_connection(handle);
-                    prop_assert!(result.is_ok());
+                    let result = manager.add_connection(handle, 23);
+                    assert!(result.is_ok());
                     unique_handles.push(handle);
                 }
             }
             
             // Try to add duplicate handle - should fail
             if let Some(&duplicate_handle) = unique_handles.first() {
-                let duplicate_result = manager.add_connection(duplicate_handle);
-                prop_assert!(duplicate_result.is_err());
+                let duplicate_result = manager.add_connection(duplicate_handle, 23);
+                assert!(duplicate_result.is_err());
             }
             
             // All tracked handles should be unique
             let mut sorted_handles = unique_handles.clone();
             sorted_handles.sort();
             sorted_handles.dedup();
-            prop_assert_eq!(unique_handles.len(), sorted_handles.len());
-        }
+            assert_eq!(unique_handles.len(), sorted_handles.len());
+        });
     }
 
     #[test]

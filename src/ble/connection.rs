@@ -84,6 +84,12 @@ impl ConnectionManager {
             return Err(ConnectionError::InvalidHandle);
         }
 
+        // Check for duplicate connection handle
+        if self.connections.contains_key(&handle) {
+            error!("CONNECTION: Connection handle {} already exists", handle);
+            return Err(ConnectionError::DuplicateHandle);
+        }
+
         let conn_info = ConnectionInfo {
             handle,
             mtu,
@@ -210,6 +216,7 @@ pub enum ConnectionError {
     ConnectionNotFound,
     ConnectionMapFull,
     InvalidHandle,
+    DuplicateHandle,
 }
 
 /// Global connection manager instance  
