@@ -14,6 +14,8 @@ use proptest::prelude::*;
 #[defmt_test::tests]
 mod tests {
     use alloc::vec::Vec;
+    extern crate alloc;
+    use alloc::format;
     use defmt::{assert, assert_eq};
 
     use super::*;
@@ -40,17 +42,13 @@ mod tests {
         ensure_heap_initialized();
     }
 
-    proptest! {
-        #[test]
-        fn test_notification_data_size_limits(
+    #[test]
+    fn test_notification_data_size_limits() {
+        proptest!(|(
             data_sizes in prop::collection::vec(0usize..100, 1..10)
-        ) {
+        )| {
             // Property #36: Notification Data Size Limits
             // Notifications should accept up to MAX_NOTIFICATION_DATA (64 bytes)
-            
-            unsafe {
-                common::HEAP.init(common::HEAP_MEM.as_ptr() as usize, common::HEAP_MEM.len());
-            }
             
             let conn_handle = 1;
             let char_handle = 10;
@@ -76,7 +74,7 @@ mod tests {
                     prop_assert!(size > MAX_NOTIFICATION_DATA);
                 }
             }
-        }
+        });
     }
 
     #[test]
@@ -123,11 +121,11 @@ mod tests {
         assert!(overflow_request.data.len() <= MAX_NOTIFICATION_DATA);
     }
 
-    proptest! {
-        #[test]
-        fn test_request_response_matching(
+    #[test]
+    fn test_request_response_matching() {
+        proptest!(|(
             response_ids in prop::collection::vec(0u32..1000, 1..8)
-        ) {
+        )| {
             // Property #38: Request-Response Matching
             // Notification responses should match their corresponding requests
             
@@ -172,7 +170,7 @@ mod tests {
             sorted_ids.sort();
             sorted_ids.dedup();
             prop_assert_eq!(response_ids.len(), sorted_ids.len());
-        }
+        });
     }
 
     #[test]
@@ -263,11 +261,11 @@ mod tests {
         assert!(!notification.is_indication);
     }
 
-    proptest! {
-        #[test]
-        fn test_notification_response_id_uniqueness(
+    #[test]
+    fn test_notification_response_id_uniqueness() {
+        proptest!(|(
             base_ids in prop::collection::vec(0u32..100, 1..8)
-        ) {
+        )| {
             // Property #41: Notification Request ID Uniqueness
             // Each notification request should have a unique request ID
             
@@ -307,7 +305,7 @@ mod tests {
                 prop_assert!(!collision_check.contains(id));
                 collision_check.push(*id);
             }
-        }
+        });
     }
 
     #[test]

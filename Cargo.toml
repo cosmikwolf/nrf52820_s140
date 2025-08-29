@@ -65,7 +65,7 @@ embedded-alloc = "0.6"
 
 # Property-based testing with no_std support
 [dev-dependencies.proptest]
-git = "git@github.com:cosmikwolf/proptest.git"
+git = "https://github.com/cosmikwolf/proptest.git"
 branch = "impl_defmt"
 default-features = false
 features = ["no_std", "defmt", "alloc", "unstable"]
@@ -86,7 +86,11 @@ name = "protocol_tests"
 harness = false
 
 [[test]]
-name = "spi_tests"
+name = "spi_tests_1"
+harness = false
+
+[[test]]
+name = "spi_tests_2"
 harness = false
 
 [[test]]
@@ -110,8 +114,13 @@ name = "notification_tests"
 harness = false
 
 [[test]]
-name = "bonding_tests"
+name = "bonding_tests_1"
 harness = false
+
+[[test]]
+name = "bonding_tests_2"
+harness = false
+
 
 [[test]]
 name = "event_tests"

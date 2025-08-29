@@ -13,6 +13,8 @@ use proptest::prelude::*;
 #[defmt_test::tests]
 mod tests {
     use alloc::vec::Vec;
+    extern crate alloc;
+    use alloc::format;
     use defmt::{assert, assert_eq};
 
     use super::*;
@@ -345,18 +347,14 @@ mod tests {
         assert_eq!(cccd_serialized[6], 0x03);
     }
 
-    proptest! {
-        #[test]
-        fn test_event_data_integrity(
+    #[test]
+    fn test_event_data_integrity() {
+        proptest!(|(
             data_sizes in prop::collection::vec(1usize..64, 1..5),
             conn_handles in prop::collection::vec(1u16..1000, 1..5)
-        ) {
+        )| {
             // Property #52: Event Data Integrity
             // Event data should maintain integrity through serialization
-            
-            unsafe {
-                common::HEAP.init(common::HEAP_MEM.as_ptr() as usize, common::HEAP_MEM.len());
-            }
             
             let mut created_events = Vec::new();
             
@@ -417,7 +415,7 @@ mod tests {
             }
             
             prop_assert!(created_events.is_empty());
-        }
+        });
     }
 
     #[test]

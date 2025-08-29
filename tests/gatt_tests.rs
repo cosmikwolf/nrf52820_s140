@@ -14,6 +14,8 @@ use proptest::prelude::*;
 #[defmt_test::tests]
 mod tests {
     use alloc::vec::Vec;
+    extern crate alloc;
+    use alloc::format;
     use defmt::{assert, assert_eq};
 
     use super::*;
@@ -24,17 +26,13 @@ mod tests {
         ensure_heap_initialized();
     }
 
-    proptest! {
-        #[test]
-        fn test_service_registration_limits(
+    #[test]
+    fn test_service_registration_limits() {
+        proptest!(|(
             service_handles in prop::collection::vec(1u16..1000, 1..10)
-        ) {
+        )| {
             // Property #28: Service Registration Limits
             // System should accept up to MAX_SERVICES (4) and reject additional services
-            
-            unsafe {
-                common::HEAP.init(common::HEAP_MEM.as_ptr() as usize, common::HEAP_MEM.len());
-            }
             
             let mut state = ModemState::new();
             let mut registered_services = Vec::new();
@@ -59,14 +57,14 @@ mod tests {
                 let overflow_result = state.add_service(overflow_handle, uuid, ServiceType::Primary);
                 prop_assert!(overflow_result.is_err());
             }
-        }
+        });
     }
 
-    proptest! {
-        #[test]
-        fn test_characteristic_handle_assignment(
+    #[test]
+    fn test_characteristic_handle_assignment() {
+        proptest!(|(
             char_counts in prop::collection::vec(1usize..10, 1..4)
-        ) {
+        )| {
             // Property #29: Characteristic Handle Assignment  
             // In the BLE modem protocol, handles are managed by the host
             
@@ -97,7 +95,7 @@ mod tests {
                 prop_assert!(service.is_some());
                 prop_assert_eq!(service.unwrap().handle, handle);
             }
-        }
+        });
     }
 
     #[test]
@@ -127,11 +125,11 @@ mod tests {
         assert!(service_after_remove.is_none());
     }
 
-    proptest! {
-        #[test]
-        fn test_uuid_base_registration(
+    #[test]
+    fn test_uuid_base_registration() {
+        proptest!(|(
             uuid_bases in prop::collection::vec(any::<[u8; 16]>(), 1..8)
-        ) {
+        )| {
             // Property #31: UUID Base Registration
             // UUID bases should be registered correctly and retrievable
             
@@ -157,7 +155,7 @@ mod tests {
                 prop_assert!(retrieved.is_some());
                 prop_assert!(arrays_equal(&retrieved.unwrap().base, uuid_base));
             }
-        }
+        });
     }
 
     #[test]
@@ -197,11 +195,11 @@ mod tests {
         }
     }
 
-    proptest! {
-        #[test]
-        fn test_service_handle_collision_prevention(
+    #[test]
+    fn test_service_handle_collision_prevention() {
+        proptest!(|(
             handles in prop::collection::vec(1u16..1000, 1..10)
-        ) {
+        )| {
             // Property #33: Service Handle Collision Prevention
             // Service handles should never collide across registrations
             
@@ -233,7 +231,7 @@ mod tests {
             sorted_handles.sort();
             sorted_handles.dedup();
             prop_assert_eq!(used_handles.len(), sorted_handles.len());
-        }
+        });
     }
 
     #[test]

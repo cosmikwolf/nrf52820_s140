@@ -33,5 +33,6 @@ test \
 --test integration_tests \
 --test notification_tests \
 --test protocol_tests \
---test spi_tests \
+--test spi_tests_1 \
+--test spi_tests_2 \
 """

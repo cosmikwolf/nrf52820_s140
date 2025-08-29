@@ -1072,10 +1072,10 @@ dependencies = [
 [[package]]
 name = "proptest"
 version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fcdab19deb5195a31cf7726a210015ff1496ba1464fd42cb4f537b8b01b471f"
+source = "git+https://github.com/cosmikwolf/proptest.git?branch=impl_defmt#68cf2d923f1f33d4c44b4adfcb4ec77104b1019a"
 dependencies = [
  "bitflags 2.9.3",
+ "defmt 1.0.1",
  "num-traits",
  "rand",
  "rand_chacha",

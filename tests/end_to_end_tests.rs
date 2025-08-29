@@ -18,6 +18,8 @@ mod tests {
     use alloc::vec::Vec;
 
     use defmt::{assert, assert_eq};
+    extern crate alloc;
+    use alloc::format;
 
     use super::*;
     use crate::common::*;
@@ -50,7 +52,7 @@ mod tests {
                     if conn_result.is_ok() {
                         unique_connections.push(conn_id);
                         // Connection should be reflected in system state
-                        assert!(connection_manager.is_connected(conn_id));
+                        prop_assert!(connection_manager.is_connected(conn_id));
                     }
                 }
             }
@@ -63,7 +65,7 @@ mod tests {
                 if service_result.is_ok() {
                     // Service should be retrievable
                     let retrieved = modem_state.get_service(service_handle);
-                    assert!(retrieved.is_some());
+                    prop_assert!(retrieved.is_some());
                 }
             }
 
@@ -71,7 +73,7 @@ mod tests {
             // This test focuses on connection and service state consistency
 
             // Verify cross-component consistency
-            assert_eq!(
+            prop_assert_eq!(
                 connection_manager.connection_count(),
                 unique_connections.len()
             );
@@ -79,8 +81,8 @@ mod tests {
             // Remove connections and verify cleanup across components
             for &conn_id in unique_connections.iter().take(1) {
                 let remove_result = connection_manager.remove_connection(conn_id, 0x16);
-                assert!(remove_result.is_ok());
-                assert!(!connection_manager.is_connected(conn_id));
+                prop_assert!(remove_result.is_ok());
+                prop_assert!(!connection_manager.is_connected(conn_id));
             }
         });
     }
@@ -240,7 +242,7 @@ mod tests {
             }
 
             // System should remain stable despite concurrent operations
-            assert!(concurrent_results.len() > 0);
+            prop_assert!(concurrent_results.len() > 0);
 
             // Check that operations either succeeded or failed gracefully
             let mut success_count = 0;
@@ -251,10 +253,10 @@ mod tests {
             }
 
             // Should have some successes (system not completely broken)
-            assert!(success_count > 0);
+            prop_assert!(success_count > 0);
 
             // System should be in consistent state
-            assert!(connection_manager.connection_count() <= MAX_CONNECTIONS);
+            prop_assert!(connection_manager.connection_count() <= MAX_CONNECTIONS);
         });
     }
 
@@ -434,19 +436,17 @@ mod tests {
         assert!(arrays_equal(&retrieved_base.unwrap().base, &uuid_base));
     }
 
-    proptest! {
-        #[test]
-        fn test_performance_under_load(
-            load_factors in prop::collection::vec(1usize..10, 3..8)
-        ) {
-            // Property #62: Performance Under Load
-            // System should maintain performance under maximum load
+    #[test]
+    fn test_performance_under_load() {
+        // Property #62: Performance Under Load
+        // System should maintain performance under maximum load
 
+        proptest! {
+            |(load_factors in prop::collection::vec(1usize..10, 3..8))| {
+                let mut total_operations = 0;
+                let mut successful_operations = 0;
 
-            let mut total_operations = 0;
-            let mut successful_operations = 0;
-
-            for &load_factor in load_factors.iter() {
+                for &load_factor in load_factors.iter() {
                 // Create load proportional to factor
                 let operations_count = load_factor * 5;
 
@@ -489,11 +489,12 @@ mod tests {
                 }
             }
 
-            // Performance metric: success rate should be reasonable under load
-            // Use integer arithmetic to avoid FPU (no f32 on nRF52820)
-            let success_rate_percent = (successful_operations * 100) / total_operations;
-            assert!(success_rate_percent > 30, "Success rate {}% too low under load", success_rate_percent);
-            assert!(total_operations > 0, "Should have attempted operations");
+                // Performance metric: success rate should be reasonable under load
+                // Use integer arithmetic to avoid FPU (no f32 on nRF52820)
+                let success_rate_percent = (successful_operations * 100) / total_operations;
+                prop_assert!(success_rate_percent > 30, "Success rate {}% too low under load", success_rate_percent);
+                prop_assert!(total_operations > 0, "Should have attempted operations");
+            }
         }
     }
 

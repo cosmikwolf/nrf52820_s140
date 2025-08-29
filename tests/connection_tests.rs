@@ -11,6 +11,8 @@ use proptest::prelude::*;
 mod tests {
     use alloc::vec::Vec;
     use defmt::{assert, assert_eq};
+    extern crate alloc;
+    use alloc::format;
 
     use super::*;
     use crate::common::*;
@@ -116,23 +118,23 @@ mod tests {
             // Add connections up to the limit
             for &conn_id in connection_ids.iter().take(MAX_CONNECTIONS) {
                 let result = manager.add_connection(conn_id, 23);
-                assert!(result.is_ok());
+                prop_assert!(result.is_ok());
                 active_connections.push(conn_id);
                 
                 // Verify connection is tracked
-                assert!(manager.is_connected(conn_id));
-                assert_eq!(manager.connection_count(), active_connections.len());
+                prop_assert!(manager.is_connected(conn_id));
+                prop_assert_eq!(manager.connection_count(), active_connections.len());
             }
             
             // Remove all connections
             for &conn_id in &active_connections {
                 let result = manager.remove_connection(conn_id, 0x16);
-                assert!(result.is_ok());
-                assert!(!manager.is_connected(conn_id));
+                prop_assert!(result.is_ok());
+                prop_assert!(!manager.is_connected(conn_id));
             }
             
             // Should be empty now
-            assert_eq!(manager.connection_count(), 0);
+            prop_assert_eq!(manager.connection_count(), 0);
         });
     }
 
@@ -185,7 +187,7 @@ mod tests {
             for &handle in handles.iter().take(MAX_CONNECTIONS) {
                 if !unique_handles.contains(&handle) {
                     let result = manager.add_connection(handle, 23);
-                    assert!(result.is_ok());
+                    prop_assert!(result.is_ok());
                     unique_handles.push(handle);
                 }
             }
@@ -193,14 +195,14 @@ mod tests {
             // Try to add duplicate handle - should fail
             if let Some(&duplicate_handle) = unique_handles.first() {
                 let duplicate_result = manager.add_connection(duplicate_handle, 23);
-                assert!(duplicate_result.is_err());
+                prop_assert!(duplicate_result.is_err());
             }
             
             // All tracked handles should be unique
             let mut sorted_handles = unique_handles.clone();
             sorted_handles.sort();
             sorted_handles.dedup();
-            assert_eq!(unique_handles.len(), sorted_handles.len());
+            prop_assert_eq!(unique_handles.len(), sorted_handles.len());
         });
     }
 
