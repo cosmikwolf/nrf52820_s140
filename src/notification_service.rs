@@ -8,7 +8,7 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 use heapless::Vec;
 
 /// Maximum data length for notifications/indications
-const MAX_NOTIFICATION_DATA: usize = 200;
+const MAX_NOTIFICATION_DATA: usize = 64;
 
 /// Notification request
 #[derive(Debug, Clone)]

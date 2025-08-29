@@ -9,7 +9,7 @@ use embassy_sync::channel::{Channel, Sender, Receiver};
 use heapless::index_map::FnvIndexMap;
 
 /// Maximum number of simultaneous connections
-const MAX_CONNECTIONS: usize = 4;
+const MAX_CONNECTIONS: usize = 2;
 
 /// Connection information
 #[derive(Format, Clone)]
@@ -72,7 +72,7 @@ pub struct ConnectionManager {
     /// Active connections indexed by handle
     connections: FnvIndexMap<u16, ConnectionInfo, MAX_CONNECTIONS>,
     /// Event sender for forwarding to host
-    event_sender: Option<Sender<'static, CriticalSectionRawMutex, ConnectionEvent, 16>>,
+    event_sender: Option<Sender<'static, CriticalSectionRawMutex, ConnectionEvent, 8>>,
 }
 
 impl ConnectionManager {
@@ -84,7 +84,7 @@ impl ConnectionManager {
     }
     
     /// Set the event sender for forwarding events to host
-    pub fn set_event_sender(&mut self, sender: Sender<'static, CriticalSectionRawMutex, ConnectionEvent, 16>) {
+    pub fn set_event_sender(&mut self, sender: Sender<'static, CriticalSectionRawMutex, ConnectionEvent, 8>) {
         self.event_sender = Some(sender);
     }
     
@@ -230,14 +230,14 @@ where
 }
 
 /// Event channel for connection events
-pub static CONNECTION_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, ConnectionEvent, 16> = Channel::new();
+pub static CONNECTION_EVENT_CHANNEL: Channel<CriticalSectionRawMutex, ConnectionEvent, 8> = Channel::new();
 
 /// Get the connection event receiver
-pub fn connection_event_receiver() -> Receiver<'static, CriticalSectionRawMutex, ConnectionEvent, 16> {
+pub fn connection_event_receiver() -> Receiver<'static, CriticalSectionRawMutex, ConnectionEvent, 8> {
     CONNECTION_EVENT_CHANNEL.receiver()
 }
 
 /// Get the connection event sender
-pub fn connection_event_sender() -> Sender<'static, CriticalSectionRawMutex, ConnectionEvent, 16> {
+pub fn connection_event_sender() -> Sender<'static, CriticalSectionRawMutex, ConnectionEvent, 8> {
     CONNECTION_EVENT_CHANNEL.sender()
 }

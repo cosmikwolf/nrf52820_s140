@@ -7,10 +7,10 @@ use defmt::{debug, error, info, warn, Format};
 use heapless::index_map::FnvIndexMap;
 
 /// Maximum number of bonded devices
-const MAX_BONDED_DEVICES: usize = 4;
+const MAX_BONDED_DEVICES: usize = 2;
 
 /// Maximum system attributes data size
-const MAX_SYS_ATTR_SIZE: usize = 128;
+const MAX_SYS_ATTR_SIZE: usize = 64;
 
 /// Bonded device information
 #[derive(Debug, Clone)]

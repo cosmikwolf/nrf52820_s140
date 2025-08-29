@@ -184,7 +184,7 @@ pub async fn request_characteristic_creation(
 /// Service builder storage for maintaining builders across requests
 struct ServiceBuilderStorage {
     /// Map of service handle -> ServiceBuilder
-    builders: FnvIndexMap<u16, ServiceBuilder<'static>, 8>,
+    builders: FnvIndexMap<u16, ServiceBuilder<'static>, 4>,
     /// Counter for generating unique service handles
     next_handle: u16,
 }
