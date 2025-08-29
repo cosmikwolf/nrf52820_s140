@@ -65,9 +65,10 @@ embedded-alloc = "0.6"
 
 # Property-based testing with no_std support
 [dev-dependencies.proptest]
-version = "1.0"
+git = "git@github.com:cosmikwolf/proptest.git"
+branch = "impl_defmt"
 default-features = false
-features = ["no_std", "alloc", "unstable"]
+features = ["no_std", "defmt", "alloc", "unstable"]
 
 [profile.release]
 debug = 2
