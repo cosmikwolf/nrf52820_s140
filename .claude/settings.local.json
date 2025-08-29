@@ -8,7 +8,8 @@
       "Bash(mv:*)",
       "Bash(cargo size:*)",
       "Bash(arm-none-eabi-size:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(cargo test:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

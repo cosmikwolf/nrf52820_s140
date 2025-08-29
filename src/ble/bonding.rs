@@ -47,14 +47,21 @@ impl BondingStorage {
             bonded_devices: FnvIndexMap::new(),
             next_bond_id: 1,
         };
-        debug!("BONDING: Created new BondingStorage with {} devices", storage.bonded_devices.len());
+        debug!(
+            "BONDING: Created new BondingStorage with {} devices",
+            storage.bonded_devices.len()
+        );
         storage
     }
 
     fn add_bonded_device(&mut self, conn_handle: u16, peer_addr: [u8; 6], addr_type: u8) -> Result<(), BondingError> {
-        debug!("BONDING: Attempting to add device {} (current count: {}/{})", 
-               conn_handle, self.bonded_devices.len(), MAX_BONDED_DEVICES);
-        
+        debug!(
+            "BONDING: Attempting to add device {} (current count: {}/{})",
+            conn_handle,
+            self.bonded_devices.len(),
+            MAX_BONDED_DEVICES
+        );
+
         let device = BondedDevice {
             conn_handle,
             peer_addr,
@@ -63,13 +70,20 @@ impl BondingStorage {
         };
 
         if self.bonded_devices.insert(conn_handle, device).is_err() {
-            debug!("BONDING: Cannot add device {} - table full ({}/{})", 
-                   conn_handle, self.bonded_devices.len(), MAX_BONDED_DEVICES);
+            debug!(
+                "BONDING: Cannot add device {} - table full ({}/{})",
+                conn_handle,
+                self.bonded_devices.len(),
+                MAX_BONDED_DEVICES
+            );
             return Err(BondingError::BondingTableFull);
         }
 
-        debug!("BONDING: Added bonded device for connection {} (new count: {})", 
-               conn_handle, self.bonded_devices.len());
+        debug!(
+            "BONDING: Added bonded device for connection {} (new count: {})",
+            conn_handle,
+            self.bonded_devices.len()
+        );
         Ok(())
     }
 
@@ -80,11 +94,13 @@ impl BondingStorage {
                 if sys_attr_data.len() > MAX_SYS_ATTR_SIZE {
                     debug!(
                         "BONDING: System attributes rejected for connection {} ({} > {} bytes)",
-                        conn_handle, sys_attr_data.len(), MAX_SYS_ATTR_SIZE
+                        conn_handle,
+                        sys_attr_data.len(),
+                        MAX_SYS_ATTR_SIZE
                     );
                     return Err(BondingError::InvalidData);
                 }
-                
+
                 // Size is valid, now update the data
                 device.sys_attr_data.clear();
                 let _ = device.sys_attr_data.extend_from_slice(sys_attr_data); // This should never fail now
@@ -123,7 +139,11 @@ impl BondingStorage {
 
     fn device_count(&self) -> usize {
         let count = self.bonded_devices.len();
-        debug!("BONDING: device_count() = {} (map capacity: {})", count, self.bonded_devices.capacity());
+        debug!(
+            "BONDING: device_count() = {} (map capacity: {})",
+            count,
+            self.bonded_devices.capacity()
+        );
         if count > 0 {
             debug!("BONDING: device count > 0, checking individual handles...");
             for handle in 1..200u16 {
@@ -143,13 +163,18 @@ static mut BONDING_STORAGE: Option<BondingStorage> = None;
 pub fn init() {
     unsafe {
         if let Some(ref existing) = BONDING_STORAGE {
-            debug!("BONDING: Replacing existing storage with {} devices", existing.device_count());
+            debug!(
+                "BONDING: Replacing existing storage with {} devices",
+                existing.device_count()
+            );
         }
         BONDING_STORAGE = Some(BondingStorage::new());
-        debug!("BONDING: After init, storage has {} devices", 
-               BONDING_STORAGE.as_ref().unwrap().device_count());
+        debug!(
+            "BONDING: After init, storage has {} devices",
+            BONDING_STORAGE.as_ref().unwrap().device_count()
+        );
     }
-    info!("BONDING: Bonding service initialized");
+    debug!("BONDING: Bonding service initialized");
 }
 
 /// Add a bonded device
@@ -217,5 +242,17 @@ pub fn get_all_bonded_handles() -> heapless::Vec<u16, MAX_BONDED_DEVICES> {
             let _ = handles.push(handle);
         }
         handles
+    })
+}
+
+/// Get bonded device information (for testing)
+pub fn get_bonded_device_info(conn_handle: u16) -> Option<BondedDevice> {
+    cortex_m::interrupt::free(|_cs| unsafe {
+        BONDING_STORAGE
+            .as_ref()
+            .unwrap()
+            .bonded_devices
+            .get(&conn_handle)
+            .cloned()
     })
 }
