@@ -10,7 +10,7 @@ use nrf_softdevice::ble::{Connection, Uuid};
 use nrf_softdevice::Softdevice;
 
 use crate::ble::events::{self, BleModemEvent};
-use crate::ble::registry::{with_registry, BleUuid, GattRegistry};
+use crate::ble::registry::{with_registry, with_registry_blocking, BleUuid, GattRegistry};
 
 /// Dynamic GATT server events
 #[derive(Debug, Format)]
@@ -50,9 +50,9 @@ impl DynamicGattServer {
         })
     }
 
-    /// Get server statistics
+    /// Get server statistics  
     pub fn stats(&self) -> (u8, u8, u8) {
-        with_registry(|registry| registry.stats())
+        with_registry_blocking(|registry| registry.stats()).unwrap_or((0, 0, 0))
     }
 
     /// Handle a characteristic write event
@@ -68,7 +68,7 @@ impl DynamicGattServer {
 
         // Check if this is a CCCD write
         if let Some(char_info) =
-            with_registry(|registry| registry.find_characteristic_by_cccd_handle(handle).map(|c| *c))
+            with_registry(|registry| registry.find_characteristic_by_cccd_handle(handle).map(|c| *c)).await
         {
             debug!("CCCD write on handle {}: {} bytes", handle, data.len());
 
@@ -97,7 +97,7 @@ impl DynamicGattServer {
 
         // Check if this is a characteristic value write
         if let Some(char_info) =
-            with_registry(|registry| registry.find_characteristic_by_value_handle(handle).map(|c| *c))
+            with_registry(|registry| registry.find_characteristic_by_value_handle(handle).map(|c| *c)).await
         {
             debug!("Characteristic write on handle {}: {} bytes", handle, data.len());
 
@@ -137,10 +137,12 @@ impl gatt_server::Server for DynamicGattServer {
 
         let conn_handle = conn.handle().unwrap_or(0);
 
+        // Use blocking registry access in trait methods
+        
         // Check if this is a CCCD write
-        if let Some(char_info) =
-            with_registry(|registry| registry.find_characteristic_by_cccd_handle(handle).map(|c| *c))
-        {
+        if let Some(char_info) = with_registry_blocking(|registry| 
+            registry.find_characteristic_by_cccd_handle(handle).copied()
+        ).flatten() {
             debug!("CCCD write on handle {}: {} bytes", handle, data.len());
 
             if !data.is_empty() {
@@ -159,26 +161,26 @@ impl gatt_server::Server for DynamicGattServer {
         }
 
         // Check if this is a characteristic value write
-        if let Some(_char_info) =
-            with_registry(|registry| registry.find_characteristic_by_value_handle(handle).map(|c| *c))
-        {
+        if let Some(_char_info) = with_registry_blocking(|registry| 
+            registry.find_characteristic_by_value_handle(handle).copied()
+        ).flatten() {
             debug!("Characteristic write on handle {}: {} bytes", handle, data.len());
 
             return Some(DynamicGattEvent::CharacteristicWrite {
                 conn_handle,
                 char_handle: handle,
-                data_len: data.len().min(255) as u8, // Store length only
+                data_len: data.len().min(255) as u8,
             });
         }
+        
+        debug!("Write to unknown handle {}: {} bytes", handle, data.len());
 
-        debug!(
-            "Write to unknown handle {} (op: {:?}, offset: {}, len: {})",
-            handle,
-            op,
-            offset,
-            data.len()
-        );
-        None
+        // Return a generic write event for unknown handles
+        Some(DynamicGattEvent::CharacteristicWrite {
+            conn_handle,
+            char_handle: handle,
+            data_len: data.len().min(255) as u8,
+        })
     }
 }
 

@@ -62,11 +62,14 @@ cc = "1.0"
 defmt-test = "0.4"
 # Global allocator for no_std testing
 embedded-alloc = "0.6"
+# Embassy futures for no_std async utilities in tests
+embassy-futures = "0.1"
 
 # Property-based testing with no_std support
 [dev-dependencies.proptest]
 git = "https://github.com/cosmikwolf/proptest.git"
-branch = "impl_defmt"
+# branch = "impl_defmt"
+rev = 'fa7fd570369781d785c7cabf1c101723b8520521'
 default-features = false
 features = ["no_std", "defmt", "alloc", "unstable"]
 

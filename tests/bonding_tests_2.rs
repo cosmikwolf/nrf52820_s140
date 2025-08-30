@@ -32,13 +32,20 @@ mod tests {
         bonding_init();
     }
 
+    #[after_each]
+    fn after_each() {
+        // Clean up all bonded devices after each test for isolation
+        embassy_futures::block_on(crate::common::bonding_teardown());
+    }
+
     #[test]
     fn test_bond_state_consistency() {
-        // Property #46: Bond State Consistency
-        // Bond states should remain consistent across operations
+        embassy_futures::block_on(async {
+            // Property #46: Bond State Consistency
+            // Bond states should remain consistent across operations
 
-        // Initially no bonds
-        assert_eq!(bonded_device_count(), 0);
+            // Initially no bonds
+            assert_eq!(bonded_device_count().await, 0);
 
         let conn_handle1 = 101;
         let peer_addr1 = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
@@ -48,22 +55,22 @@ mod tests {
         let peer_addr2 = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF];
         let addr_type2 = 1;
 
-        // Add first bond
-        let add1_result = add_bonded_device(conn_handle1, peer_addr1, addr_type1);
-        assert!(add1_result.is_ok());
-        let sys_attr1 = [0x33, 0x44];
-        let set1_result = set_system_attributes(conn_handle1, &sys_attr1);
-        assert!(set1_result.is_ok());
+            // Add first bond
+            let add1_result = add_bonded_device(conn_handle1, peer_addr1, addr_type1).await;
+            assert!(add1_result.is_ok());
+            let sys_attr1 = [0x33, 0x44];
+            let set1_result = set_system_attributes(conn_handle1, &sys_attr1).await;
+            assert!(set1_result.is_ok());
 
-        // Verify state consistency
-        assert_eq!(bonded_device_count(), 1);
-        assert!(is_device_bonded(conn_handle1));
-        assert!(!is_device_bonded(conn_handle2));
+            // Verify state consistency
+            assert_eq!(bonded_device_count().await, 1);
+            assert!(is_device_bonded(conn_handle1).await);
+            assert!(!is_device_bonded(conn_handle2).await);
 
-        // Verify system attributes are stored
-        let retrieved1 = get_system_attributes(conn_handle1);
-        assert!(retrieved1.is_some());
-        assert_eq!(retrieved1.unwrap().len(), 2);
+            // Verify system attributes are stored
+            let retrieved1 = get_system_attributes(conn_handle1).await;
+            assert!(retrieved1.is_some());
+            assert_eq!(retrieved1.unwrap().len(), 2);
 
         // Add second bond if we haven't reached the limit
         if bonded_device_count() < MAX_BONDED_DEVICES {

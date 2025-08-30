@@ -6,6 +6,8 @@
 use defmt::{debug, error, Format};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
+use embassy_sync::mutex::Mutex;
+use embassy_sync::once_lock::OnceLock;
 use heapless::index_map::FnvIndexMap;
 
 /// Maximum number of simultaneous connections
@@ -219,22 +221,30 @@ pub enum ConnectionError {
     DuplicateHandle,
 }
 
-/// Global connection manager instance  
-static mut CONNECTION_MANAGER: Option<ConnectionManager> = None;
+/// Global connection manager instance - protected by mutex for thread safety
+static CONNECTION_MANAGER: OnceLock<Mutex<CriticalSectionRawMutex, ConnectionManager>> = OnceLock::new();
+
+/// Get or initialize the global connection manager
+fn get_connection_manager() -> &'static Mutex<CriticalSectionRawMutex, ConnectionManager> {
+    CONNECTION_MANAGER.get_or_init(|| {
+        debug!("CONNECTION: Initializing connection manager for the first time");
+        Mutex::new(ConnectionManager::new())
+    })
+}
 
 /// Initialize the connection manager
 pub fn init() {
-    unsafe {
-        CONNECTION_MANAGER = Some(ConnectionManager::new());
-    }
+    let manager = get_connection_manager();
+    debug!("CONNECTION: Connection manager initialized");
 }
 
 /// Access the global connection manager
-pub fn with_connection_manager<F, R>(f: F) -> R
+pub async fn with_connection_manager<F, R>(f: F) -> R
 where
     F: FnOnce(&mut ConnectionManager) -> R,
 {
-    cortex_m::interrupt::free(|_cs| unsafe { CONNECTION_MANAGER.as_mut().map(f).unwrap() })
+    let mut manager = get_connection_manager().lock().await;
+    f(&mut manager)
 }
 
 /// Event channel for connection events

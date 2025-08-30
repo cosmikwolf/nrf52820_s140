@@ -253,7 +253,7 @@ async fn process_service_request(sd: &'static Softdevice, request: ServiceCreate
     // debug!("Processing service creation request: {:?}", request);
 
     // Convert BleUuid to nrf-softdevice Uuid
-    let uuid = crate::ble::registry::with_registry(|registry| request.uuid.to_softdevice_uuid(registry));
+    let uuid = crate::ble::registry::with_registry(|registry| request.uuid.to_softdevice_uuid(registry)).await;
 
     let result = match uuid {
         Some(uuid) => {
@@ -280,7 +280,7 @@ async fn process_characteristic_request(request: CharacteristicCreateRequest) {
     // debug!("Processing characteristic creation request: {:?}", request);
 
     // Convert BleUuid to nrf-softdevice Uuid
-    let uuid = crate::ble::registry::with_registry(|registry| request.uuid.to_softdevice_uuid(registry));
+    let uuid = crate::ble::registry::with_registry(|registry| request.uuid.to_softdevice_uuid(registry)).await;
 
     let result = match uuid {
         Some(uuid) => {
@@ -368,7 +368,7 @@ async fn create_service_with_builder(
 
     match crate::ble::registry::with_registry(|registry| {
         registry.add_service(service_handle, ble_uuid, service_type)
-    }) {
+    }).await {
         Ok(()) => {
             info!("Service registered with handle {} in registry", service_handle);
             Ok(service_handle)

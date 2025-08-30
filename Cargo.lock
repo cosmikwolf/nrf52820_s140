@@ -947,6 +947,7 @@ dependencies = [
  "defmt-rtt",
  "defmt-test",
  "embassy-executor",
+ "embassy-futures",
  "embassy-nrf",
  "embassy-sync 0.7.2",
  "embassy-time",
@@ -1072,7 +1073,7 @@ dependencies = [
 [[package]]
 name = "proptest"
 version = "1.7.0"
-source = "git+https://github.com/cosmikwolf/proptest.git?branch=impl_defmt#68cf2d923f1f33d4c44b4adfcb4ec77104b1019a"
+source = "git+https://github.com/cosmikwolf/proptest.git?rev=fa7fd570369781d785c7cabf1c101723b8520521#fa7fd570369781d785c7cabf1c101723b8520521"
 dependencies = [
  "bitflags 2.9.3",
  "defmt 1.0.1",

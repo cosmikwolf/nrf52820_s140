@@ -246,7 +246,7 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     let mtu = 23; // Default ATT MTU
 
                     // Register connection with connection manager
-                    if let Err(e) = connection::with_connection_manager(|mgr| mgr.add_connection(conn_handle, mtu)) {
+                    if let Err(e) = connection::with_connection_manager(|mgr| mgr.add_connection(conn_handle, mtu)).await {
                         debug!("Failed to register connection: {:?}", e);
                     }
 
@@ -284,7 +284,7 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     let disconnection_reason = 0x13; // BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION
                     if let Err(e) = connection::with_connection_manager(|mgr| {
                         mgr.remove_connection(conn_handle, disconnection_reason)
-                    }) {
+                    }).await {
                         debug!("Failed to unregister connection: {:?}", e);
                     }
 

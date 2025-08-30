@@ -4,6 +4,9 @@
 //! Handles CCCD states and other client-specific data.
 
 use defmt::{debug, info, warn, Format};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
+use embassy_sync::once_lock::OnceLock;
 use heapless::index_map::FnvIndexMap;
 
 /// Maximum number of bonded devices
@@ -156,103 +159,76 @@ impl BondingStorage {
     }
 }
 
-/// Global bonding storage
-static mut BONDING_STORAGE: Option<BondingStorage> = None;
+/// Global bonding storage - protected by mutex for thread safety
+static BONDING_STORAGE: OnceLock<Mutex<CriticalSectionRawMutex, BondingStorage>> = OnceLock::new();
+
+/// Get or initialize the global bonding storage
+fn get_bonding_storage() -> &'static Mutex<CriticalSectionRawMutex, BondingStorage> {
+    BONDING_STORAGE.get_or_init(|| {
+        debug!("BONDING: Initializing bonding storage for the first time");
+        Mutex::new(BondingStorage::new())
+    })
+}
 
 /// Initialize the bonding service
 pub fn init() {
-    unsafe {
-        if let Some(ref existing) = BONDING_STORAGE {
-            debug!(
-                "BONDING: Replacing existing storage with {} devices",
-                existing.device_count()
-            );
-        }
-        BONDING_STORAGE = Some(BondingStorage::new());
-        debug!(
-            "BONDING: After init, storage has {} devices",
-            BONDING_STORAGE.as_ref().unwrap().device_count()
-        );
-    }
+    let storage = get_bonding_storage();
     debug!("BONDING: Bonding service initialized");
 }
 
 /// Add a bonded device
-pub fn add_bonded_device(conn_handle: u16, peer_addr: [u8; 6], addr_type: u8) -> Result<(), BondingError> {
-    cortex_m::interrupt::free(|_cs| unsafe {
-        BONDING_STORAGE
-            .as_mut()
-            .unwrap()
-            .add_bonded_device(conn_handle, peer_addr, addr_type)
-    })
+pub async fn add_bonded_device(conn_handle: u16, peer_addr: [u8; 6], addr_type: u8) -> Result<(), BondingError> {
+    let mut storage = get_bonding_storage().lock().await;
+    storage.add_bonded_device(conn_handle, peer_addr, addr_type)
 }
 
 /// Set system attributes for a bonded device
-pub fn set_system_attributes(conn_handle: u16, sys_attr_data: &[u8]) -> Result<(), BondingError> {
-    cortex_m::interrupt::free(|_cs| unsafe {
-        BONDING_STORAGE
-            .as_mut()
-            .unwrap()
-            .set_system_attributes(conn_handle, sys_attr_data)
-    })
+pub async fn set_system_attributes(conn_handle: u16, sys_attr_data: &[u8]) -> Result<(), BondingError> {
+    let mut storage = get_bonding_storage().lock().await;
+    storage.set_system_attributes(conn_handle, sys_attr_data)
 }
 
 /// Get system attributes for a bonded device
-pub fn get_system_attributes(conn_handle: u16) -> Option<heapless::Vec<u8, MAX_SYS_ATTR_SIZE>> {
-    cortex_m::interrupt::free(|_cs| unsafe {
-        BONDING_STORAGE
-            .as_ref()
-            .unwrap()
-            .get_system_attributes(conn_handle)
-            .map(|data| {
-                let mut vec = heapless::Vec::new();
-                let _ = vec.extend_from_slice(data);
-                vec
-            })
-    })
+pub async fn get_system_attributes(conn_handle: u16) -> Option<heapless::Vec<u8, MAX_SYS_ATTR_SIZE>> {
+    let storage = get_bonding_storage().lock().await;
+    storage.get_system_attributes(conn_handle)
+        .map(|data| {
+            let mut vec = heapless::Vec::new();
+            let _ = vec.extend_from_slice(data);
+            vec
+        })
 }
 
 /// Remove a bonded device
-pub fn remove_bonded_device(conn_handle: u16) -> Result<(), BondingError> {
-    cortex_m::interrupt::free(|_cs| unsafe { BONDING_STORAGE.as_mut().unwrap().remove_bonded_device(conn_handle) })
+pub async fn remove_bonded_device(conn_handle: u16) -> Result<(), BondingError> {
+    let mut storage = get_bonding_storage().lock().await;
+    storage.remove_bonded_device(conn_handle)
 }
 
 /// Get the number of bonded devices
-pub fn bonded_device_count() -> usize {
-    cortex_m::interrupt::free(|_cs| unsafe { BONDING_STORAGE.as_ref().unwrap().device_count() })
+pub async fn bonded_device_count() -> usize {
+    let storage = get_bonding_storage().lock().await;
+    storage.device_count()
 }
 
 /// Check if a device is bonded
-pub fn is_device_bonded(conn_handle: u16) -> bool {
-    cortex_m::interrupt::free(|_cs| unsafe {
-        BONDING_STORAGE
-            .as_ref()
-            .unwrap()
-            .bonded_devices
-            .contains_key(&conn_handle)
-    })
+pub async fn is_device_bonded(conn_handle: u16) -> bool {
+    let storage = get_bonding_storage().lock().await;
+    storage.bonded_devices.contains_key(&conn_handle)
 }
 
 /// Get all bonded device handles (for testing/cleanup)
-pub fn get_all_bonded_handles() -> heapless::Vec<u16, MAX_BONDED_DEVICES> {
-    cortex_m::interrupt::free(|_cs| unsafe {
-        let storage = BONDING_STORAGE.as_ref().unwrap();
-        let mut handles = heapless::Vec::new();
-        for &handle in storage.bonded_devices.keys() {
-            let _ = handles.push(handle);
-        }
-        handles
-    })
+pub async fn get_all_bonded_handles() -> heapless::Vec<u16, MAX_BONDED_DEVICES> {
+    let storage = get_bonding_storage().lock().await;
+    let mut handles = heapless::Vec::new();
+    for &handle in storage.bonded_devices.keys() {
+        let _ = handles.push(handle);
+    }
+    handles
 }
 
 /// Get bonded device information (for testing)
-pub fn get_bonded_device_info(conn_handle: u16) -> Option<BondedDevice> {
-    cortex_m::interrupt::free(|_cs| unsafe {
-        BONDING_STORAGE
-            .as_ref()
-            .unwrap()
-            .bonded_devices
-            .get(&conn_handle)
-            .cloned()
-    })
+pub async fn get_bonded_device_info(conn_handle: u16) -> Option<BondedDevice> {
+    let storage = get_bonding_storage().lock().await;
+    storage.bonded_devices.get(&conn_handle).cloned()
 }

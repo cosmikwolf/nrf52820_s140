@@ -4,6 +4,9 @@
 //! GATT services and characteristics, designed for nRF52820 constraints.
 
 use defmt::Format;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
+use embassy_sync::once_lock::OnceLock;
 use heapless::Vec;
 use nrf_softdevice::ble::Uuid;
 
@@ -340,17 +343,35 @@ impl BleUuid {
     }
 }
 
-/// Global GATT registry instance
-static mut GATT_REGISTRY: GattRegistry = GattRegistry::new();
+/// Global GATT registry instance - protected by mutex for thread safety
+static GATT_REGISTRY: OnceLock<Mutex<CriticalSectionRawMutex, GattRegistry>> = OnceLock::new();
 
-/// Access the global GATT registry
-///
-/// # Safety
-/// This function provides mutable access to a static registry.
-/// It should only be called from a single thread (main async task).
-pub fn with_registry<T, F>(f: F) -> T
+/// Get or initialize the global GATT registry
+fn get_gatt_registry() -> &'static Mutex<CriticalSectionRawMutex, GattRegistry> {
+    GATT_REGISTRY.get_or_init(|| {
+        defmt::debug!("REGISTRY: Initializing GATT registry for the first time");
+        Mutex::new(GattRegistry::new())
+    })
+}
+
+/// Access the global GATT registry (async version)
+pub async fn with_registry<T, F>(f: F) -> T
 where
     F: FnOnce(&mut GattRegistry) -> T,
 {
-    unsafe { f(&mut GATT_REGISTRY) }
+    let mut registry = get_gatt_registry().lock().await;
+    f(&mut registry)
+}
+
+/// Access the global GATT registry (blocking version for trait methods)
+pub fn with_registry_blocking<T, F>(f: F) -> Option<T>
+where
+    F: FnOnce(&mut GattRegistry) -> T,
+{
+    let registry_mutex = get_gatt_registry();
+    if let Ok(mut registry) = registry_mutex.try_lock() {
+        Some(f(&mut registry))
+    } else {
+        None
+    }
 }

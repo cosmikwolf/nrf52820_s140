@@ -175,7 +175,7 @@ async fn process_notification_request(request: &NotificationRequest) -> Result<(
 
     // Check if connection exists
     let connection_exists =
-        crate::ble::connection::with_connection_manager(|mgr| mgr.get_connection(request.conn_handle).is_some());
+        crate::ble::connection::with_connection_manager(|mgr| mgr.get_connection(request.conn_handle).is_some()).await;
 
     if !connection_exists {
         warn!(

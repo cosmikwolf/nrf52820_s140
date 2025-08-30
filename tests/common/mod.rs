@@ -65,3 +65,58 @@ pub fn arrays_equal(a: &[u8], b: &[u8]) -> bool {
 
     true
 }
+
+/// Common bonding test teardown - cleans up all bonded devices
+pub async fn bonding_teardown() {
+    use nrf52820_s140_firmware::ble::bonding::{bonded_device_count, get_all_bonded_handles, remove_bonded_device};
+    
+    let initial_count = bonded_device_count().await;
+    if initial_count > 0 {
+        defmt::debug!("CLEANUP: Starting cleanup with {} bonded devices", initial_count);
+    }
+
+    // Limit iterations to prevent infinite loops
+    for cleanup_iteration in 0..5 {
+        let remaining = bonded_device_count().await;
+        if remaining == 0 {
+            break;
+        }
+
+        defmt::debug!(
+            "CLEANUP: Iteration {}, {} devices remaining",
+            cleanup_iteration,
+            remaining
+        );
+
+        // Get all currently bonded device handles and remove them
+        let bonded_handles = get_all_bonded_handles().await;
+        let mut removed_this_iteration = 0;
+
+        for handle in bonded_handles {
+            if remove_bonded_device(handle).await.is_ok() {
+                removed_this_iteration += 1;
+                defmt::debug!("CLEANUP: Removed handle {}", handle);
+            }
+        }
+
+        defmt::debug!(
+            "CLEANUP: Removed {} devices in iteration {}",
+            removed_this_iteration,
+            cleanup_iteration
+        );
+
+        // If we didn't remove any devices but there are still some remaining, break to avoid infinite loop
+        if removed_this_iteration == 0 && remaining > 0 {
+            defmt::error!(
+                "CLEANUP: Failed to remove any devices but {} remain - breaking to avoid infinite loop",
+                remaining
+            );
+            break;
+        }
+    }
+
+    let final_count = bonded_device_count().await;
+    if final_count > 0 {
+        defmt::error!("CLEANUP: Cleanup incomplete - {} devices still remain", final_count);
+    }
+}
