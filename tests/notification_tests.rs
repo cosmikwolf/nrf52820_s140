@@ -6,9 +6,8 @@ mod common;
 
 use nrf52820_s140_firmware::ble::notifications::{
     NotificationRequest, NotificationResponse, NotificationError, 
-    MAX_NOTIFICATION_DATA, send_notification, send_indication
+    MAX_NOTIFICATION_DATA
 };
-use nrf52820_s140_firmware::ble::connection::ConnectionManager;
 use proptest::prelude::*;
 
 #[defmt_test::tests]
@@ -135,6 +134,11 @@ mod tests {
             
             // Create requests with unique IDs
             for &response_id in response_ids.iter().take(8) {
+                // Skip if we already added this response_id
+                if request_response_pairs.iter().any(|(req, _): &(NotificationRequest, NotificationResponse)| req.response_id == response_id) {
+                    continue;
+                }
+                
                 let data = heapless_vec![0x55; 8];
                 let request = NotificationRequest {
                     conn_handle,
@@ -148,7 +152,6 @@ mod tests {
                 let response = NotificationResponse {
                     response_id,
                     result: Ok(()),
-                    conn_handle,
                 };
                 
                 request_response_pairs.push((request, response));
@@ -157,9 +160,9 @@ mod tests {
             // Verify request-response matching
             for (request, response) in &request_response_pairs {
                 prop_assert_eq!(request.response_id, response.response_id);
-                prop_assert_eq!(request.conn_handle, response.conn_handle);
                 prop_assert!(request.is_indication); // Only indications get responses
                 prop_assert!(response.result.is_ok());
+                // Note: response doesn't contain conn_handle, only response_id matching is verified
             }
             
             // Verify all request IDs are unique

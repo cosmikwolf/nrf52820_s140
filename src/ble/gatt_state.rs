@@ -182,6 +182,11 @@ impl ModemState {
             return Err(StateError::ServicesExhausted);
         }
 
+        // Check for duplicate handle
+        if self.services.iter().any(|s| s.handle == handle) {
+            return Err(StateError::InvalidHandle);
+        }
+
         let service_info = ServiceInfo {
             handle,
             uuid,

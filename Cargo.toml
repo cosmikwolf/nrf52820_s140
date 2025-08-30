@@ -106,7 +106,11 @@ name = "connection_tests"
 harness = false
 
 [[test]]
-name = "gatt_tests"
+name = "gatt_tests_1"
+harness = false
+
+[[test]]
+name = "gatt_tests_2"
 harness = false
 
 [[test]]
