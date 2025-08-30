@@ -69,7 +69,8 @@ embassy-futures = "0.1"
 [dev-dependencies.proptest]
 git = "https://github.com/cosmikwolf/proptest.git"
 # branch = "impl_defmt"
-rev = 'fa7fd570369781d785c7cabf1c101723b8520521'
+branch = "working_impl"
+# rev = 'fa7fd570369781d785c7cabf1c101723b8520521'
 default-features = false
 features = ["no_std", "defmt", "alloc", "unstable"]
 
@@ -128,6 +129,9 @@ harness = false
 name = "bonding_tests_2"
 harness = false
 
+[[test]]
+name = "bonding_tests_3"
+harness = false
 
 [[test]]
 name = "event_tests"

@@ -92,7 +92,7 @@ pub async fn handle_service_add(payload: &[u8], sd: &Softdevice) -> Result<TxPac
     debug!("GATTS: Parsed UUID: {:?}", ble_uuid);
 
     // Convert to nrf-softdevice UUID
-    let softdevice_uuid = with_registry(|registry| ble_uuid.to_softdevice_uuid(registry));
+    let softdevice_uuid = with_registry(|registry| ble_uuid.to_softdevice_uuid(registry)).await;
 
     let uuid = match softdevice_uuid {
         Some(uuid) => uuid,
@@ -146,7 +146,7 @@ pub async fn handle_characteristic_add(payload: &[u8], _sd: &Softdevice) -> Resu
     debug!("GATTS: Service handle: {}", service_handle);
 
     // Verify service exists
-    let service_exists = with_registry(|registry| registry.find_service(service_handle).is_some());
+    let service_exists = with_registry(|registry| registry.find_service(service_handle).is_some()).await;
 
     if !service_exists {
         debug!("GATTS: Service handle {} not found", service_handle);
@@ -243,7 +243,7 @@ pub async fn handle_characteristic_add(payload: &[u8], _sd: &Softdevice) -> Resu
             max_length,
             permissions,
         )
-    }) {
+    }).await {
         error!("GATTS: Failed to add characteristic to registry: {:?}", e);
         return ResponseBuilder::build_error(CommandError::StateError(
             crate::ble::gatt_state::StateError::CharacteristicsExhausted,
@@ -340,7 +340,7 @@ pub async fn handle_mtu_reply(payload: &[u8]) -> Result<TxPacket, CommandError> 
     debug!("GATTS: MTU reply - conn: {}, MTU: {}", conn_handle, mtu);
 
     // Update the MTU in the connection manager
-    match crate::ble::connection::with_connection_manager(|mgr| mgr.update_mtu(conn_handle, mtu)) {
+    match crate::ble::connection::with_connection_manager(|mgr| mgr.update_mtu(conn_handle, mtu)).await {
         Ok(()) => {
             info!("GATTS: Updated MTU for connection {} to {}", conn_handle, mtu);
         }
@@ -388,7 +388,7 @@ pub async fn handle_sys_attr_set(payload: &[u8]) -> Result<TxPacket, CommandErro
     let sys_attr_data = reader.read_slice(attr_length)?;
 
     // Store system attributes in the bonding service
-    match crate::ble::bonding::set_system_attributes(conn_handle, sys_attr_data) {
+    match crate::ble::bonding::set_system_attributes(conn_handle, sys_attr_data).await {
         Ok(()) => {
             info!(
                 "GATTS: Set system attributes for connection {} ({} bytes)",

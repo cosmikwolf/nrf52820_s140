@@ -1073,7 +1073,7 @@ dependencies = [
 [[package]]
 name = "proptest"
 version = "1.7.0"
-source = "git+https://github.com/cosmikwolf/proptest.git?rev=fa7fd570369781d785c7cabf1c101723b8520521#fa7fd570369781d785c7cabf1c101723b8520521"
+source = "git+https://github.com/cosmikwolf/proptest.git?branch=working_impl#fa7fd570369781d785c7cabf1c101723b8520521"
 dependencies = [
  "bitflags 2.9.3",
  "defmt 1.0.1",
