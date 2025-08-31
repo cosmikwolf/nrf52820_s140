@@ -6,7 +6,7 @@
 
 use defmt::{debug, error, info, warn, Format};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use embassy_nrf::peripherals::{P0_00, P0_01, P0_02, P0_03, P0_04, P0_05, P0_06, P0_07, TWISPI0, TWISPI1};
+use embassy_nrf::peripherals::{P0_00, P0_01, P0_04, P0_05, P0_06, P0_07, TWISPI0, TWISPI1};
 use embassy_nrf::spim::{self, Frequency, Spim};
 use embassy_nrf::spis::{self, Spis};
 use embassy_nrf::{bind_interrupts, Peri};
@@ -23,23 +23,21 @@ bind_interrupts!(struct Irqs {
 });
 
 /// TX SPI Configuration (SPIM0 - Master)
-/// Pins: SS=P0.01, SCK=P0.00, MOSI=P0.04, MISO=P0.02 (dummy)
+/// Pins: SS=P0.01, SCK=P0.00, MOSI=P0.04 (master out - device transmits to host)
 /// Config: 8MHz, CPOL=High, CPHA=Leading, MSB First
 pub struct TxSpiConfig {
     pub cs_pin: Peri<'static, P0_01>,
     pub sck_pin: Peri<'static, P0_00>,
     pub mosi_pin: Peri<'static, P0_04>,
-    pub miso_pin: Peri<'static, P0_02>, // Dummy MISO for master mode
 }
 
 /// RX SPI Configuration (SPIS1 - Slave)
-/// Pins: SS=P0.07, SCK=P0.06, MOSI=P0.05, MISO=P0.03 (dummy)
+/// Pins: SS=P0.07, SCK=P0.06, MISO=P0.05 (slave in - host transmits to device)
 /// Config: CPOL=High, CPHA=Leading, MSB First
 pub struct RxSpiConfig {
     pub cs_pin: Peri<'static, P0_07>,
     pub sck_pin: Peri<'static, P0_06>,
-    pub mosi_pin: Peri<'static, P0_05>,
-    pub miso_pin: Peri<'static, P0_03>, // Dummy MISO for slave mode
+    pub miso_pin: Peri<'static, P0_05>,
 }
 
 /// SPI communication errors
@@ -84,7 +82,6 @@ pub async fn tx_spi_task(
     cs_pin: Peri<'static, P0_01>,
     sck_pin: Peri<'static, P0_00>,
     mosi_pin: Peri<'static, P0_04>,
-    miso_pin: Peri<'static, P0_02>,
     spim0: Peri<'static, TWISPI0>,
 ) {
     info!("Starting TX SPI task (SPIM0 - Master)");
@@ -96,16 +93,19 @@ pub async fn tx_spi_task(
     config.frequency = Frequency::M8;
     config.mode = spim::Mode {
         polarity: spim::Polarity::IdleHigh,
-        phase: spim::Phase::CaptureOnSecondTransition,
+        phase: spim::Phase::CaptureOnFirstTransition,
     };
 
-    let mut spi = Spim::new(spim0, Irqs, sck_pin, mosi_pin, miso_pin, config);
+    let mut spi = Spim::new_txonly(spim0, Irqs, sck_pin, mosi_pin, config);
 
     info!("TX SPI configured: 8MHz, CPOL=High, CPHA=Leading");
+    debug!("TX SPI: Entering main loop, waiting for packets...");
 
     loop {
         // Wait for packet to transmit
+        debug!("TX SPI: Waiting for packet from TX_CHANNEL...");
         let tx_packet = TX_CHANNEL.receive().await;
+        debug!("TX SPI: Received packet from TX_CHANNEL");
 
         // Get serialized data
         let data = tx_packet.as_slice();
@@ -121,8 +121,7 @@ pub async fn tx_spi_task(
         let len = data.len().min(256);
         tx_buffer[..len].copy_from_slice(&data[..len]);
 
-        let mut rx_buffer = [0u8; 256];
-        let transfer_result = spi.transfer(&mut rx_buffer[..len], &tx_buffer[..len]).await;
+        let transfer_result = spi.write(&tx_buffer[..len]).await;
 
         // Release SS
         Timer::after(Duration::from_micros(10)).await;
@@ -148,8 +147,7 @@ pub async fn tx_spi_task(
 pub async fn rx_spi_task(
     cs_pin: Peri<'static, P0_07>,
     sck_pin: Peri<'static, P0_06>,
-    mosi_pin: Peri<'static, P0_05>,
-    miso_pin: Peri<'static, P0_03>,
+    miso_pin: Peri<'static, P0_05>,
     spis1: Peri<'static, TWISPI1>,
 ) {
     info!("Starting RX SPI task (SPIS1 - Slave)");
@@ -157,23 +155,24 @@ pub async fn rx_spi_task(
     let mut config = spis::Config::default();
     config.mode = spis::Mode {
         polarity: spis::Polarity::IdleHigh,
-        phase: spis::Phase::CaptureOnSecondTransition,
+        phase: spis::Phase::CaptureOnFirstTransition,
     };
 
-    let mut spi = Spis::new(spis1, Irqs, sck_pin, cs_pin, mosi_pin, miso_pin, config);
+    let mut spi = Spis::new_rxonly(spis1, Irqs, cs_pin, sck_pin, miso_pin, config);
 
     info!("RX SPI configured: Slave mode, CPOL=High, CPHA=Leading");
+    debug!("RX SPI: Entering main loop, waiting for host...");
 
     loop {
         // Buffer for incoming data (EasyDMA requires RAM buffers)
         let mut rx_buffer = [0u8; 256];
-        let tx_dummy = [0u8; 256];
 
         debug!("RX SPI: Waiting for host transmission...");
 
         // Wait for SPI transaction from host
-        match spi.transfer(&mut rx_buffer, &tx_dummy).await {
-            Ok((rx_len, _tx_len)) => {
+        debug!("RX SPI: Calling spi.read()...");
+        match spi.read(&mut rx_buffer).await {
+            Ok(rx_len) => {
                 if rx_len > 0 {
                     debug!("RX SPI: Received {} bytes", rx_len);
 
@@ -246,7 +245,6 @@ pub async fn init_and_spawn(
         tx_config.cs_pin,
         tx_config.sck_pin,
         tx_config.mosi_pin,
-        tx_config.miso_pin,
         spim0,
     ))?;
 
@@ -254,7 +252,6 @@ pub async fn init_and_spawn(
     spawner.spawn(rx_spi_task(
         rx_config.cs_pin,
         rx_config.sck_pin,
-        rx_config.mosi_pin,
         rx_config.miso_pin,
         spis1,
     ))?;
