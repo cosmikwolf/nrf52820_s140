@@ -70,14 +70,14 @@ async fn main(spawner: Spawner) {
 
     // Configure SPI peripherals
     let tx_spi_config = TxSpiConfig {
-        ss_pin: peripherals.P0_01,
+        cs_pin: peripherals.P0_01,
         sck_pin: peripherals.P0_00,
         mosi_pin: peripherals.P0_04,
         miso_pin: peripherals.P0_02, // Dummy MISO for master mode
     };
 
     let rx_spi_config = RxSpiConfig {
-        ss_pin: peripherals.P0_07,
+        cs_pin: peripherals.P0_07,
         sck_pin: peripherals.P0_06,
         mosi_pin: peripherals.P0_05,
         miso_pin: peripherals.P0_03, // Dummy MISO for slave mode

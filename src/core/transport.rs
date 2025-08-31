@@ -26,17 +26,17 @@ bind_interrupts!(struct Irqs {
 /// Pins: SS=P0.01, SCK=P0.00, MOSI=P0.04, MISO=P0.02 (dummy)
 /// Config: 8MHz, CPOL=High, CPHA=Leading, MSB First
 pub struct TxSpiConfig {
-    pub ss_pin: Peri<'static, P0_01>,
+    pub cs_pin: Peri<'static, P0_01>,
     pub sck_pin: Peri<'static, P0_00>,
     pub mosi_pin: Peri<'static, P0_04>,
     pub miso_pin: Peri<'static, P0_02>, // Dummy MISO for master mode
 }
 
-/// RX SPI Configuration (SPIS1 - Slave)  
+/// RX SPI Configuration (SPIS1 - Slave)
 /// Pins: SS=P0.07, SCK=P0.06, MOSI=P0.05, MISO=P0.03 (dummy)
 /// Config: CPOL=High, CPHA=Leading, MSB First
 pub struct RxSpiConfig {
-    pub ss_pin: Peri<'static, P0_07>,
+    pub cs_pin: Peri<'static, P0_07>,
     pub sck_pin: Peri<'static, P0_06>,
     pub mosi_pin: Peri<'static, P0_05>,
     pub miso_pin: Peri<'static, P0_03>, // Dummy MISO for slave mode
@@ -81,7 +81,7 @@ pub static RX_CHANNEL: Channel<CriticalSectionRawMutex, Packet, 1> = Channel::ne
 /// Receives packets from TX_CHANNEL and transmits them via SPIM0
 #[embassy_executor::task]
 pub async fn tx_spi_task(
-    ss_pin: Peri<'static, P0_01>,
+    cs_pin: Peri<'static, P0_01>,
     sck_pin: Peri<'static, P0_00>,
     mosi_pin: Peri<'static, P0_04>,
     miso_pin: Peri<'static, P0_02>,
@@ -90,7 +90,7 @@ pub async fn tx_spi_task(
     info!("Starting TX SPI task (SPIM0 - Master)");
 
     // Configure SPI pins
-    let mut ss = Output::new(ss_pin, Level::High, OutputDrive::Standard);
+    let mut cs = Output::new(cs_pin, Level::High, OutputDrive::Standard);
 
     let mut config = spim::Config::default();
     config.frequency = Frequency::M8;
@@ -113,7 +113,7 @@ pub async fn tx_spi_task(
         debug!("TX SPI: Sending {} bytes", data.len());
 
         // Pull SS low to start transmission
-        ss.set_low();
+        cs.set_low();
         Timer::after(Duration::from_micros(10)).await;
 
         // EasyDMA requires data in RAM - copy to local buffer
@@ -126,7 +126,7 @@ pub async fn tx_spi_task(
 
         // Release SS
         Timer::after(Duration::from_micros(10)).await;
-        ss.set_high();
+        cs.set_high();
 
         match transfer_result {
             Ok(_) => {
@@ -142,11 +142,11 @@ pub async fn tx_spi_task(
     }
 }
 
-/// RX SPI task - handles Host → Device communication  
+/// RX SPI task - handles Host → Device communication
 /// Receives data via SPIS1 and forwards packets to RX_CHANNEL
 #[embassy_executor::task]
 pub async fn rx_spi_task(
-    ss_pin: Peri<'static, P0_07>,
+    cs_pin: Peri<'static, P0_07>,
     sck_pin: Peri<'static, P0_06>,
     mosi_pin: Peri<'static, P0_05>,
     miso_pin: Peri<'static, P0_03>,
@@ -160,7 +160,7 @@ pub async fn rx_spi_task(
         phase: spis::Phase::CaptureOnSecondTransition,
     };
 
-    let mut spi = Spis::new(spis1, Irqs, sck_pin, ss_pin, mosi_pin, miso_pin, config);
+    let mut spi = Spis::new(spis1, Irqs, sck_pin, cs_pin, mosi_pin, miso_pin, config);
 
     info!("RX SPI configured: Slave mode, CPOL=High, CPHA=Leading");
 
@@ -243,7 +243,7 @@ pub async fn init_and_spawn(
 
     // Spawn TX SPI task
     spawner.spawn(tx_spi_task(
-        tx_config.ss_pin,
+        tx_config.cs_pin,
         tx_config.sck_pin,
         tx_config.mosi_pin,
         tx_config.miso_pin,
@@ -252,7 +252,7 @@ pub async fn init_and_spawn(
 
     // Spawn RX SPI task
     spawner.spawn(rx_spi_task(
-        rx_config.ss_pin,
+        rx_config.cs_pin,
         rx_config.sck_pin,
         rx_config.mosi_pin,
         rx_config.miso_pin,
