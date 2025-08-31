@@ -51,13 +51,12 @@ log_level = "WARN"
 # Whether or not to enable RTT logging
 enabled = true
 
-# A list of channel associations to be displayed.
 up_channels = [
   { channel = 0, name = "Terminal", up_mode = "NoBlockSkip", format = "Defmt" },
-]
-down_channels = [
-  { channel = 0, name = "Terminal", down_mode = "NoBlockSkip", format = "Raw" },
-]
+] # A list of channel associations to be displayed.
+# down_channels = [
+#   { channel = 0, name = "Terminal", down_mode = "NoBlockSkip", format = "Raw" },
+# ]
 
 # The timeout in ms for which to wait for the host to connect to the probe before continuing flashing.
 timeout = 3000

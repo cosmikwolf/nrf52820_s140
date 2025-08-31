@@ -34,32 +34,39 @@ async fn main(spawner: Spawner) {
 
     info!("Embassy initialized, configuring SoftDevice...");
 
-    // Configure SoftDevice with basic settings
+    // Configure SoftDevice with working test_connection.rs settings
     let sd_config = SdConfig {
         clock: Some(nrf_softdevice::raw::nrf_clock_lf_cfg_t {
-            source: nrf_softdevice::raw::NRF_CLOCK_LF_SRC_SYNTH as u8,
+            source: nrf_softdevice::raw::NRF_CLOCK_LF_SRC_SYNTH as u8, // Use synthesized from 32MHz crystal
             rc_ctiv: 0,
             rc_temp_ctiv: 0,
-            accuracy: nrf_softdevice::raw::NRF_CLOCK_LF_ACCURACY_250_PPM as u8,
-            // source: nrf_softdevice::raw::NRF_CLOCK_LF_SRC_RC as u8,
-            // rc_ctiv: 16,
-            // rc_temp_ctiv: 2,
-            // accuracy: nrf_softdevice::raw::NRF_CLOCK_LF_ACCURACY_500_PPM as u8,
+            accuracy: nrf_softdevice::raw::NRF_CLOCK_LF_ACCURACY_50_PPM as u8,
         }),
         conn_gap: Some(nrf_softdevice::raw::ble_gap_conn_cfg_t {
-            conn_count: 1,
+            conn_count: 2, // Balanced - more than minimal but less than full example
             event_length: 24,
         }),
-        conn_gatt: Some(nrf_softdevice::raw::ble_gatt_conn_cfg_t { att_mtu: 247 }),
-        gatts_attr_tab_size: Some(nrf_softdevice::raw::ble_gatts_cfg_attr_tab_size_t { attr_tab_size: 1408 }),
+        conn_gatt: Some(nrf_softdevice::raw::ble_gatt_conn_cfg_t {
+            att_mtu: 128, // Match working example
+        }),
+        gatts_attr_tab_size: Some(nrf_softdevice::raw::ble_gatts_cfg_attr_tab_size_t {
+            attr_tab_size: nrf_softdevice::raw::BLE_GATTS_ATTR_TAB_SIZE_DEFAULT, // Use default like working example
+        }),
         gap_role_count: Some(nrf_softdevice::raw::ble_gap_cfg_role_count_t {
             adv_set_count: 1,
-            periph_role_count: 1,
-            central_role_count: 0,
+            periph_role_count: 2,
+            central_role_count: 1,
             central_sec_count: 0,
-            _bitfield_1: Default::default(),
+            _bitfield_1: nrf_softdevice::raw::ble_gap_cfg_role_count_t::new_bitfield_1(0),
         }),
-        ..Default::default()
+        // Configure vendor-specific UUID support (matches original firmware)
+        common_vs_uuid: Some(nrf_softdevice::raw::ble_common_cfg_vs_uuid_t { vs_uuid_count: 10 }),
+        gap_device_name: None,
+        gap_ppcp_incl: None,
+        gap_car_incl: None,
+        gatts_service_changed: None,
+        conn_gattc: None,
+        conn_gatts: None,
     };
 
     let sd = Softdevice::enable(&sd_config);
@@ -108,7 +115,7 @@ async fn main(spawner: Spawner) {
     //
     // // Spawn advertising task (replaces the old BLE task)
     // info!("Spawning advertising task...");
-    // unwrap!(spawner.spawn(ble::advertising::advertising_task(sd, server)));
+    unwrap!(spawner.spawn(ble::advertising::advertising_task(sd, server)));
     //
     // // Spawn command processor task to handle SPI commands
     // info!("Spawning command processor task...");
@@ -126,6 +133,19 @@ async fn main(spawner: Spawner) {
 
     info!("Main thread starting heartbeat loop...");
     unwrap!(spawner.spawn(heartbeat_task()));
+
+    // Simulate advertising start command for testing
+    use ble::advertising::{send_command, AdvCommand};
+    let start_cmd = AdvCommand::Start {
+        handle: 1,  // Use valid handle (not 0)
+        conn_cfg_tag: 0,
+    };
+    if send_command(start_cmd).is_ok() {
+        info!("Simulated advertising start command sent with handle 1");
+    } else {
+        info!("Failed to send advertising start command");
+    }
+
     info!("System ready - all tasks spawned and running");
     // info!("BLE modem firmware operational - waiting for SPI host commands");
     //
@@ -153,7 +173,7 @@ async fn heartbeat_task() {
     let mut counter = 0;
     loop {
         // Simple delay using yield_now loop
-        for _ in 0..1000 {
+        for _ in 0..100000 {
             yield_now().await;
         }
         info!("Heartbeat: System operational ({} cycles)", counter);

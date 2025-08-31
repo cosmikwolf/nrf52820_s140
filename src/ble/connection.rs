@@ -81,8 +81,9 @@ impl ConnectionManager {
     /// Add a new connection
     pub fn add_connection(&mut self, handle: u16, mtu: u16) -> Result<(), ConnectionError> {
         // BLE connection handle 0 is reserved and invalid
+        debug!("CONNECTION: Attempting to add connection with handle: {}", handle);
         if handle == 0 {
-            error!("CONNECTION: Invalid connection handle 0");
+            error!("CONNECTION: Invalid connection handle 0 - BLE spec violation");
             return Err(ConnectionError::InvalidHandle);
         }
 

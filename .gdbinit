@@ -1,7 +1,7 @@
 # GDB configuration for nRF52820 debugging
 
 # Connect to probe-rs automatically
-target remote 127.0.0.1:1337
+target remote 127.0.0.1:1338
 
 # Set up breakpoints for common panic locations
 break rust_begin_unwind

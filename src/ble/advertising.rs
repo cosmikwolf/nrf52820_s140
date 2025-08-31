@@ -4,12 +4,12 @@
 //! Provides coordinated advertising management that can be controlled via
 //! individual commands while leveraging the robust high-level abstractions.
 
-use defmt::debug;
+use defmt::{debug, info};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Timer};
 use heapless::Vec;
+use nrf_softdevice::ble::advertisement_builder::{Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload};
 use nrf_softdevice::ble::peripheral::{self, Config as PeripheralConfig, ConnectableAdvertisement, FilterPolicy};
 use nrf_softdevice::ble::{Phy, TxPower};
 use nrf_softdevice::Softdevice;
@@ -147,21 +147,24 @@ pub fn send_command(cmd: AdvCommand) -> Result<(), AdvCommand> {
 /// Enhanced BLE advertising task that coordinates with protocol commands
 #[embassy_executor::task]
 pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
-    debug!("Starting coordinated advertising task...");
+    info!("Starting coordinated advertising task...");
 
     // Default advertising data - can be overridden by ADV_CONFIGURE commands
-    let mut default_adv_data = Vec::<u8, MAX_ADV_DATA_LEN>::new();
-    let default_scan_data = Vec::<u8, MAX_ADV_DATA_LEN>::new();
+    // Use LegacyAdvertisementBuilder like the working test_connection.rs
+    static ADV_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new()
+        .flags(&[Flag::GeneralDiscovery, Flag::LE_Only])
+        .full_name("BLE_Modem")
+        .build();
 
-    // Simple default advertisement
-    let _ = default_adv_data.extend_from_slice(&[
-        0x02, 0x01, 0x06, // Flags: General Discoverable + LE Only
-        0x0A, 0x09, b'B', b'L', b'E', b'_', b'M', b'o', b'd', b'e', b'm', // Complete local name
-    ]);
+    static SCAN_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new().build();
 
     loop {
+        // Small yield to prevent tight loop spam
+        embassy_futures::yield_now().await;
+        
         // Check for advertising commands
         if let Ok(cmd) = ADV_COMMAND_CHANNEL.try_receive() {
+            info!("Advertising task: Received command");
             let mut controller = ADV_CONTROLLER.lock().await;
 
             match cmd {
@@ -199,29 +202,16 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
         // Check if advertising is requested
         let should_advertise = {
             let controller = ADV_CONTROLLER.lock().await;
-            controller.is_advertising_requested()
+            let requested = controller.is_advertising_requested();
+            // debug!("Advertising task: should_advertise = {}", requested);
+            requested
         };
 
         if should_advertise {
-            let (adv_data, scan_data, config) = {
+            info!("Advertising task: Starting advertising...");
+            let config = {
                 let controller = ADV_CONTROLLER.lock().await;
-                let adv = controller.adv_data();
-                let scan = controller.scan_data();
-
-                // Use configured data if available, otherwise use defaults
-                let adv_data = if !adv.is_empty() {
-                    Vec::from_slice(adv).unwrap_or_default()
-                } else {
-                    default_adv_data.clone()
-                };
-
-                let scan_data = if !scan.is_empty() {
-                    Vec::from_slice(scan).unwrap_or_default()
-                } else {
-                    default_scan_data.clone()
-                };
-
-                (adv_data, scan_data, *controller.config())
+                *controller.config()
             };
 
             // Update gap state to active
@@ -230,33 +220,54 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                 gap_state.set_adv_state(AdvState::Active);
             }
 
-            // Create advertising configuration
+            // Create advertising configuration using static payloads (like working test)
             let advertisement = ConnectableAdvertisement::ScannableUndirected {
-                adv_data: &adv_data,
-                scan_data: &scan_data,
+                adv_data: &ADV_DATA,
+                scan_data: &SCAN_DATA,
             };
 
             // Start advertising and wait for connection
+            debug!("Starting advertising...");
             match peripheral::advertise_connectable(sd, advertisement, &config).await {
                 Ok(conn) => {
                     debug!("BLE connection established!");
+                    debug!("Connection handle: {:?}", conn.handle());
 
-                    // Get connection handle and MTU
-                    let conn_handle = conn.handle().unwrap_or(0);
-                    let mtu = 23; // Default ATT MTU
+                    // Get connection handle and MTU - store handle for cleanup
+                    let stored_handle = if let Some(conn_handle) = conn.handle() {
+                        debug!("Connection handle from SoftDevice: {}", conn_handle);
 
-                    // Register connection with connection manager
-                    if let Err(e) =
-                        connection::with_connection_manager(|mgr| mgr.add_connection(conn_handle, mtu)).await
-                    {
-                        debug!("Failed to register connection: {:?}", e);
-                    }
+                        // BLE spec: handle 0 is reserved and invalid, but SoftDevice might return it
+                        if conn_handle == 0 {
+                            debug!("SoftDevice returned invalid connection handle 0 - skipping registration");
+                            None
+                        } else {
+                            let mtu = 23; // Default ATT MTU
+
+                            // Register connection with connection manager
+                            info!("Registering connection handle {} with connection manager", conn_handle);
+                            if let Err(e) =
+                                connection::with_connection_manager(|mgr| mgr.add_connection(conn_handle, mtu)).await
+                            {
+                                info!("Failed to register connection: {:?}", e);
+                                None // Don't store handle if registration failed
+                            } else {
+                                info!("Successfully registered connection handle {}", conn_handle);
+                                Some(conn_handle) // Store handle for cleanup
+                            }
+                        }
+                    } else {
+                        debug!("Connection established but no handle available");
+                        None
+                    };
 
                     // Update states
-                    {
-                        let mut gap_state = gap_state::gap_state().lock().await;
-                        gap_state.set_connected(true);
-                        gap_state.conn_handle = conn_handle;
+                    if let Some(conn_handle) = conn.handle() {
+                        if conn_handle != 0 {
+                            let mut gap_state = gap_state::gap_state().lock().await;
+                            gap_state.set_connected(true);
+                            gap_state.conn_handle = conn_handle;
+                        }
                     }
                     {
                         let mut controller = ADV_CONTROLLER.lock().await;
@@ -266,11 +277,11 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     // Run GATT server on the connection with event forwarding
                     use nrf_softdevice::ble::gatt_server;
 
-                    // Forward connection event to host
-                    let connected_event = crate::ble::events::create_connected_event(&conn);
-                    if let Err(_) = crate::ble::events::forward_event_to_host(connected_event).await {
-                        debug!("Failed to forward connection event to host");
-                    }
+                    // Forward connection event to host - TEMPORARILY DISABLED FOR DEBUGGING
+                    // let connected_event = crate::ble::events::create_connected_event(&conn);
+                    // if let Err(_) = crate::ble::events::forward_event_to_host(connected_event).await {
+                    //     debug!("Failed to forward connection event to host");
+                    // }
 
                     let result = gatt_server::run(&conn, &bt_server, |event| {
                         // Forward GATT server events to host
@@ -281,28 +292,46 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     })
                     .await;
                     debug!("GATT server connection ended: {:?}", defmt::Debug2Format(&result));
+                    info!("Starting disconnection cleanup...");
 
-                    // Unregister connection from connection manager
+                    // Unregister connection from connection manager using stored handle
                     let disconnection_reason = 0x13; // BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION
-                    if let Err(e) = connection::with_connection_manager(|mgr| {
-                        mgr.remove_connection(conn_handle, disconnection_reason)
-                    })
-                    .await
-                    {
-                        debug!("Failed to unregister connection: {:?}", e);
+                    if let Some(conn_handle) = stored_handle {
+                        info!("Removing connection handle {} from connection manager", conn_handle);
+                        info!("About to call connection manager...");
+                        if let Err(e) = connection::with_connection_manager(|mgr| {
+                            mgr.remove_connection(conn_handle, disconnection_reason)
+                        })
+                        .await
+                        {
+                            info!("Failed to unregister connection: {:?}", e);
+                        } else {
+                            info!("Successfully removed connection handle {}", conn_handle);
+                        }
+                        info!("Connection manager call completed");
+
+                        // Forward disconnection event to host - TEMPORARILY DISABLED
+                        info!("Skipping disconnection event forwarding for debugging");
+                        // let disconnected_event =
+                        //     crate::ble::events::create_disconnected_event(conn_handle, disconnection_reason);
+                        // if let Err(_) = crate::ble::events::forward_event_to_host(disconnected_event).await {
+                        //     debug!("Failed to forward disconnection event to host");
+                        // }
+                    } else {
+                        info!("No stored connection handle to remove (registration may have failed)");
                     }
 
-                    // Forward disconnection event to host
-                    let disconnected_event =
-                        crate::ble::events::create_disconnected_event(conn_handle, disconnection_reason);
-                    if let Err(_) = crate::ble::events::forward_event_to_host(disconnected_event).await {
-                        debug!("Failed to forward disconnection event to host");
-                    }
-
-                    // Update connection state
+                    // Update connection state  
                     {
                         let mut gap_state = gap_state::gap_state().lock().await;
                         gap_state.set_connected(false);
+                    }
+                    
+                    // Auto-restart advertising after disconnection
+                    {
+                        let mut controller = ADV_CONTROLLER.lock().await;
+                        controller.advertising_requested = true;
+                        info!("Auto-restarting advertising after disconnection");
                     }
                 }
                 Err(e) => {
@@ -319,6 +348,7 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     }
 
                     // Timer::after(Duration::from_secs(1)).await;
+                    embassy_futures::yield_now().await;
                 }
             }
         } else {
@@ -332,8 +362,10 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                 }
             }
 
-            // Brief delay when not advertising
-            // Timer::after(Duration::from_millis(100)).await;
+            // Brief delay when not advertising - use longer delay to reduce spam
+            for _ in 0..10000 {
+                embassy_futures::yield_now().await;
+            }
         }
     }
 }
