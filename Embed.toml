@@ -1,27 +1,38 @@
 [default.probe]
 # USB VID/PID of probe, optional
-# usb_vid = "1337"
-# usb_pid = "1337"
+usb_vid = "1366"
+usb_pid = "0105"
 
 # Serial number of probe, optional
-# serial = "001122334455"
+serial = "000600109129"
 
 # protocol to select, can be "JTAG" or "Swd", depending on what the probe supports
-# protocol = "Swd"
+protocol = "Swd"
 
 # speed for the interface
-# speed = 4000
+speed = 4000
 
 [default.flashing]
-# whether to halt the chip after flashing
-halt_afterwards = false
-
-# whether to restore a broken UICR after flashing
+# Whether or not the target should be flashed.
+enabled = true
+# Whether or not bytes erased but not rewritten with data from the ELF
+# should be restored with their contents before erasing.
 restore_unwritten_bytes = false
+# The path where an SVG of the assembled flash layout should be written to.
+# flash_layout_output_path = "out.svg"
+# Triggers a full chip erase instead of a page by page erase.
+do_chip_erase = false
+# Whether to disable double buffering
+disable_double_buffering = false
+# Whether to verify flash contents before downloading
+preverify = true
+# Whether to verify flash contents after downloading
+verify = false
 
 [default.reset]
 # whether to enable the chip after flashing
-halt_afterwards = false
+enabled = true
+halt_afterwards = true
 
 [default.general]
 # The chip of the target
@@ -34,21 +45,26 @@ chip_descriptions = []
 log_level = "WARN"
 
 # Use this flag to assert the nreset & ntrst pins during attaching the probe to the chip
-connect_under_reset = true
+# connect_under_reset = true
 
 [default.rtt]
 # Whether or not to enable RTT logging
 enabled = true
 
 # A list of channel associations to be displayed.
-channels = [
-  # { up = 0, down = 0, name = "Terminal", up_mode = "NoBlockSkip", format = "Defmt" },
-  { up = 0, down = 0, name = "Terminal", up_mode = "NoBlockSkip", format = "Defmt" },
+up_channels = [
+  { channel = 0, name = "Terminal", up_mode = "NoBlockSkip", format = "Defmt" },
+]
+down_channels = [
+  { channel = 0, name = "Terminal", down_mode = "NoBlockSkip", format = "Raw" },
 ]
 
 # The timeout in ms for which to wait for the host to connect to the probe before continuing flashing.
 timeout = 3000
 
 # Whether or not to show the location of the log messages
-show_location = true
+# show_location = trueQ
 
+[default.gdb]
+enabled = true
+gdb_connection_string = "127.0.0.1:1338"

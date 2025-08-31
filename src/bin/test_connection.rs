@@ -12,7 +12,6 @@ use defmt::{info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::config::Config;
 use embassy_nrf::interrupt;
-use embassy_time::{Duration, Timer};
 use nrf_softdevice::ble::advertisement_builder::{Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload};
 use nrf_softdevice::ble::peripheral::advertise_connectable;
 use nrf_softdevice::ble::{gatt_server, peripheral};
@@ -97,7 +96,10 @@ async fn main(spawner: Spawner) {
 
     // Main loop - just heartbeat
     loop {
-        Timer::after(Duration::from_secs(5)).await;
+        // Timer::after(Duration::from_secs(5)).await;
+        for _ in 0..1000000 {
+            embassy_futures::yield_now().await;
+        }
         info!("=== Test running - heartbeat ===");
     }
 }

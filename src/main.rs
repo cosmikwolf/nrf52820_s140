@@ -1,14 +1,16 @@
 #![no_std]
 #![no_main]
 
-use defmt::*;
+use defmt::{error, info, unwrap};
 use embassy_executor::Spawner;
+use embassy_futures::yield_now;
 use embassy_nrf::config::Config;
 use embassy_nrf::interrupt;
-use embassy_time::{Duration, Timer};
 // Advertisement builder imports removed - now using advertising controller
 use nrf_softdevice::{Config as SdConfig, Softdevice};
 use {defmt_rtt as _, panic_probe as _};
+
+// panic-probe provides the panic handler with RTT output and debugger support
 
 mod ble;
 mod commands;
@@ -35,10 +37,14 @@ async fn main(spawner: Spawner) {
     // Configure SoftDevice with basic settings
     let sd_config = SdConfig {
         clock: Some(nrf_softdevice::raw::nrf_clock_lf_cfg_t {
-            source: nrf_softdevice::raw::NRF_CLOCK_LF_SRC_RC as u8,
-            rc_ctiv: 16,
-            rc_temp_ctiv: 2,
-            accuracy: nrf_softdevice::raw::NRF_CLOCK_LF_ACCURACY_500_PPM as u8,
+            source: nrf_softdevice::raw::NRF_CLOCK_LF_SRC_SYNTH as u8,
+            rc_ctiv: 0,
+            rc_temp_ctiv: 0,
+            accuracy: nrf_softdevice::raw::NRF_CLOCK_LF_ACCURACY_250_PPM as u8,
+            // source: nrf_softdevice::raw::NRF_CLOCK_LF_SRC_RC as u8,
+            // rc_ctiv: 16,
+            // rc_temp_ctiv: 2,
+            // accuracy: nrf_softdevice::raw::NRF_CLOCK_LF_ACCURACY_500_PPM as u8,
         }),
         conn_gap: Some(nrf_softdevice::raw::ble_gap_conn_cfg_t {
             conn_count: 1,
@@ -65,22 +71,20 @@ async fn main(spawner: Spawner) {
     });
     info!("Server initialized");
 
-    // Spawn SoftDevice task (CRITICAL!)
+    // Spawn SoftDevice task (CRITICAL for timer functionality!)
     unwrap!(spawner.spawn(softdevice_task(sd)));
 
     // Configure SPI peripherals
     let tx_spi_config = TxSpiConfig {
         cs_pin: peripherals.P0_01,
         sck_pin: peripherals.P0_00,
-        mosi_pin: peripherals.P0_04,
-        miso_pin: peripherals.P0_02, // Dummy MISO for master mode
+        mosi_pin: peripherals.P0_04, // Master out - device transmits to host
     };
 
     let rx_spi_config = RxSpiConfig {
         cs_pin: peripherals.P0_07,
         sck_pin: peripherals.P0_06,
-        mosi_pin: peripherals.P0_05,
-        miso_pin: peripherals.P0_03, // Dummy MISO for slave mode
+        miso_pin: peripherals.P0_05, // Slave in - host transmits to device
     };
 
     // Initialize and spawn SPI tasks
@@ -95,33 +99,65 @@ async fn main(spawner: Spawner) {
         .await
     );
 
-    // Initialize other modules
+    // // Initialize other modules
     ble::gatt_state::init();
     core::memory::init();
     ble::connection::init();
     ble::bonding::init();
     ble::gap_state::init().await;
-
-    // Spawn advertising task (replaces the old BLE task)
-    unwrap!(spawner.spawn(ble::advertising::advertising_task(sd, server)));
-
-    // Spawn command processor task to handle SPI commands
+    //
+    // // Spawn advertising task (replaces the old BLE task)
+    // info!("Spawning advertising task...");
+    // unwrap!(spawner.spawn(ble::advertising::advertising_task(sd, server)));
+    //
+    // // Spawn command processor task to handle SPI commands
+    // info!("Spawning command processor task...");
     unwrap!(spawner.spawn(commands::command_processor_task(sd)));
-
-    // Spawn service manager task for dynamic GATT operations
+    //
+    // // Spawn service manager task for dynamic GATT operations
+    // info!("Spawning service manager task...");
     unwrap!(spawner.spawn(ble::manager::service_manager_task(sd)));
-
-    // Spawn notification service task for BLE notifications/indications
+    //
+    // // Spawn notification service task for BLE notifications/indications
+    // info!("Spawning notification service task...");
     unwrap!(spawner.spawn(ble::notifications::notification_service_task()));
-
+    //
     // Event forwarding is now handled directly in the advertising task
 
-    info!("System initialized, entering main loop");
-
-    // Main loop - just logging heartbeat
+    info!("Main thread starting heartbeat loop...");
+    unwrap!(spawner.spawn(heartbeat_task()));
+    info!("System ready - all tasks spawned and running");
+    // info!("BLE modem firmware operational - waiting for SPI host commands");
+    //
+    // Simple heartbeat using yield_now to avoid timer issues
+    // let mut counter = 0;
     loop {
-        Timer::after(Duration::from_secs(10)).await;
-        info!("Heartbeat - system running");
+        //     // Yield to allow other tasks to run
+        //     // for _ in 0..100000 {
+        //     //     yield_now().await;
+        //     // }
+        //
+        //     counter += 1;
+        //     // if counter % 100 == 0 {
+        //     info!("Heartbeat: System operational ({} cycles)", counter);
+        //     // }
+        // Simple delay using yield_now loop
+        for _ in 0..100000 {
+            yield_now().await;
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn heartbeat_task() {
+    let mut counter = 0;
+    loop {
+        // Simple delay using yield_now loop
+        for _ in 0..1000 {
+            yield_now().await;
+        }
+        info!("Heartbeat: System operational ({} cycles)", counter);
+        counter += 1;
     }
 }
 

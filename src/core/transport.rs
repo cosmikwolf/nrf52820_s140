@@ -12,7 +12,6 @@ use embassy_nrf::spis::{self, Spis};
 use embassy_nrf::{bind_interrupts, Peri};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{Duration, Timer};
 
 use crate::core::memory::{BufferError, TxPacket};
 use crate::core::protocol::{Packet, ProtocolError};
@@ -114,7 +113,6 @@ pub async fn tx_spi_task(
 
         // Pull SS low to start transmission
         cs.set_low();
-        Timer::after(Duration::from_micros(10)).await;
 
         // EasyDMA requires data in RAM - copy to local buffer
         let mut tx_buffer = [0u8; 256];
@@ -124,7 +122,6 @@ pub async fn tx_spi_task(
         let transfer_result = spi.write(&tx_buffer[..len]).await;
 
         // Release SS
-        Timer::after(Duration::from_micros(10)).await;
         cs.set_high();
 
         match transfer_result {
@@ -196,7 +193,7 @@ pub async fn rx_spi_task(
             }
             Err(e) => {
                 error!("RX SPI: Transfer error: {:?}", defmt::Debug2Format(&e));
-                Timer::after(Duration::from_millis(10)).await;
+                // Timer::after(Duration::from_millis(10)).await;
             }
         }
     }

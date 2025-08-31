@@ -1,6 +1,9 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 # replace nRF52820_xxAA with your chip's target
-runner = "probe-rs run --chip nRF52820_xxAA --log-format=oneline"
+# Normal run (RTT output)
+runner = "probe-rs run --probe 1366:0105:000600109129 --chip nRF52820_xxAA --log-format=oneline"
+# GDB server (no RTT - use separate terminal for RTT)
+# runner = "probe-rs gdb --probe 1366:0105:000600109129 --chip nRF52820_xxAA --gdb-connection-string 127.0.0.1:1337"
 # runner = ["probe-rs", "run", "--chip", "$CHIP", "--log-format=oneline"]
 
 rustflags = [
@@ -36,3 +39,6 @@ test \
 --test spi_tests_1 \
 --test spi_tests_2 \
 """
+
+# GDB debugging - start GDB server
+gdb-server = "build --bin nrf52820-s140-firmware && probe-rs gdb --probe 1366:0105:000600109129 --chip nRF52820_xxAA --gdb-connection-string 127.0.0.1:1337 target/thumbv7em-none-eabihf/debug/nrf52820-s140-firmware"

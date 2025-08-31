@@ -35,7 +35,7 @@ pub struct AdvController {
     config: PeripheralConfig,
     /// Combined advertising + scan response data buffer
     combined_data: Vec<u8, MAX_COMBINED_ADV_DATA>,
-    /// Split point between adv data and scan response data  
+    /// Split point between adv data and scan response data
     adv_data_len: usize,
     /// Whether advertising is currently requested
     advertising_requested: bool,
@@ -246,7 +246,9 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     let mtu = 23; // Default ATT MTU
 
                     // Register connection with connection manager
-                    if let Err(e) = connection::with_connection_manager(|mgr| mgr.add_connection(conn_handle, mtu)).await {
+                    if let Err(e) =
+                        connection::with_connection_manager(|mgr| mgr.add_connection(conn_handle, mtu)).await
+                    {
                         debug!("Failed to register connection: {:?}", e);
                     }
 
@@ -284,7 +286,9 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                     let disconnection_reason = 0x13; // BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION
                     if let Err(e) = connection::with_connection_manager(|mgr| {
                         mgr.remove_connection(conn_handle, disconnection_reason)
-                    }).await {
+                    })
+                    .await
+                    {
                         debug!("Failed to unregister connection: {:?}", e);
                     }
 
@@ -314,7 +318,7 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
                         controller.advertising_requested = false;
                     }
 
-                    Timer::after(Duration::from_secs(1)).await;
+                    // Timer::after(Duration::from_secs(1)).await;
                 }
             }
         } else {
@@ -329,7 +333,7 @@ pub async fn advertising_task(sd: &'static Softdevice, bt_server: Server) {
             }
 
             // Brief delay when not advertising
-            Timer::after(Duration::from_millis(100)).await;
+            // Timer::after(Duration::from_millis(100)).await;
         }
     }
 }

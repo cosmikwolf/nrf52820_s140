@@ -16,12 +16,13 @@ embassy-time = { version = "0.5.0", features = [
   "defmt-timestamp-uptime",
 ] }
 embassy-sync = { version = "0.7.2", features = ["defmt"] }
+embassy-futures = "0.1.1"
 
 embassy-nrf = { version = "0.7.0", default-features = false, features = [
   "nrf52820",
   "gpiote",
-  "time-driver-rtc1",
   "defmt",
+  "time-driver-rtc1",
 ] }
 
 nrf-softdevice = { version = "0.1", features = [
