@@ -12,7 +12,7 @@ use crate::core::memory::TxPacket;
 use crate::ble::events::{register_event_callback, clear_event_callbacks, EventCallbackFn};
 
 /// Firmware version in BCD format (matches original C implementation)
-const FIRMWARE_VERSION_BCD: u32 = 0x00010000; // Version 1.0.0.0
+const FIRMWARE_VERSION_BCD: u32 = 0x0001; // Version 0.01
 
 /// Handle GET_INFO command (0x0001)
 /// Returns firmware version in BCD format
