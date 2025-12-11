@@ -24,7 +24,7 @@ this firmware allows end users to create new Bluetooth services with GATT - some
 ```cargo run```
 
 ### GATT Operations Implemented over SPI
-1. Register UUID bases (REGISTER_UUID_GROUP - 0x0010) - For custom 128-bit UUIDs
+ 1. Register UUID bases (REGISTER_UUID_GROUP - 0x0010) - For custom 128-bit UUIDs
 2. Create services (GATTS_SERVICE_ADD - 0x0080) - Primary or secondary services
 3. Add characteristics (GATTS_CHARACTERISTIC_ADD - 0x0081) - With properties like READ, WRITE, NOTIFY
 4. Send notifications (GATTS_HVX - 0x0083) - Push data to connected clients
