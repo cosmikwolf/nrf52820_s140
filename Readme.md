@@ -3,25 +3,25 @@
 ### * work in progress *
 this firmware allows end users to create new Bluetooth services with GATT - some parts of this firmware were written with Claude Code
 
-  1. Install probe-rs
+1. Install probe-rs
 
-    ```cargo install probe-rs-cli```
+```cargo install probe-rs-cli```
 
-  2. install flip-link
+2. install flip-link
 
-    ```cargo install flip-link```
+```cargo install flip-link```
 
-  3. download and s140_nrf52_7.3.0_softdevice.hex from Nordic's website:
+3. download and s140_nrf52_7.3.0_softdevice.hex from Nordic's website:
 
-    ```https://www.nordicsemi.com/Products/Development-software/S130/Download```
+```https://www.nordicsemi.com/Products/Development-software/S130/Download```
 
-  3. flash softdevice
+3. flash softdevice
 
-    ```probe-rs download --binary-format ihex --chip nRF52820_xxAA s140_nrf52_7.3.0_softdevice.hex```
+```probe-rs download --binary-format ihex --chip nRF52820_xxAA s140_nrf52_7.3.0_softdevice.hex```
 
-  4. build and flash app
+4. build and flash app
 
-    ```cargo run```
+```cargo run```
 
 ### GATT Operations Implemented over SPI
 1. Register UUID bases (REGISTER_UUID_GROUP - 0x0010) - For custom 128-bit UUIDs
